@@ -45,27 +45,27 @@ if __name__ == '__main__':
         plt.plot(data['datetime'], data[key])
     '''
 
+    grub_targets = SandPfromWiki.get_SandP500()
+    grub_targets.append('SPY')
     grub_dates = [1582551000000]
 
     '''File Handling'''
     filename = '../StockData/S&P_500_{}'.format(str(datetime.date.today()))
-    if not os.exists(filename):
+    if not os.path.exists(filename):
         datafile = h5py.File(filename)
+        datafile.attrs.create(name='SandP', data=grub_targets)
     else:
         print('Data file already exists!')
 
-    grub_symbols = []
-    grub_data = []
-    # grub_targets = ['SPY']
-    grub_targets = SandPfromWiki.get_SandP500()
-    grub_targets.append('SPY')
-    for grubbie, grub_date in zip(grub_targets, grub_dates):
-        symbol, data = grub(symbol=grubbie, startdate=grub_date)
-        grub_symbols.append(symbol)
-        grub_data.append(data)
+    for grubbie in grub_targets:
+        symbol, data = grub(symbol=grubbie)
 
-    for key in grub_data[0].keys():
-        plt.figure()
-        plt.suptitle(key)
-        for dat in grub_data:
-            plt.plot(dat['datetime'], dat[key])
+        local_group = datafile.create_group(str(symbol))
+        print(local_group.name)
+        for key in data.keys():
+            local_dataset = local_group.create_dataset(name=key, shape=data[key].shape)
+            print(local_dataset.name)
+            local_dataset[...] = data[key]
+
+    datafile.close()
+
