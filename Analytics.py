@@ -22,6 +22,14 @@ def moving_average(data, period=20):
     return moving_avg
 
 
+def multi_average(data, periods):
+    sma_list = []
+    for period in periods:
+        sma_list.append(moving_average(data=data, period=period))
+
+    return np.array(sma_list)
+
+
 def exp_moving_average(data, alpha, period=200):
     '''
     calculate exponential moving average
@@ -52,6 +60,16 @@ def bollinger_bands(data, average, period=20):
     two_sigma = 2 * np.sqrt(np.convolve(pad_squares, np.ones(period), mode='valid') / period)
 
     return average - two_sigma, average + two_sigma
+
+
+def multi_bollinger_bands(data, multi_average, periods):
+    bollinger_list_low = []
+    bollinger_list_high = []
+    for i, period in enumerate(periods):
+        low, high = bollinger_bands(data, multi_average[i], period=20)
+        bollinger_list_low.append(low)
+        bollinger_list_high.append(high)
+    return np.array(bollinger_list_low), np.array(bollinger_list_high)
 
 
 def candle_avg(open, high, low):
@@ -95,4 +113,3 @@ def second_derivative(data, period=20):
     derivative[0:period] = np.ones_like(period - 1) * derivative[period]
 
     return derivative
-

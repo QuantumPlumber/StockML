@@ -1,10 +1,10 @@
 import requests
-from config import apikey
+from utilities.config import apikey
 import pandas as pd
 import matplotlib.pyplot as plt
 import time
 import importlib
-import SandPfromWiki
+import DataGrubbing.SandPfromWiki as SandPfromWiki
 import h5py
 import datetime
 import os
@@ -29,10 +29,14 @@ def grub(symbol='GOOG', startdate=1581921000000):
     content = requests.get(url=price_endpoint, params=payload)
 
     prelim_data = content.json()
-    symbol = prelim_data['symbol']
-    data = pd.DataFrame.from_dict(prelim_data['candles'])
+    try:
+        symbol = prelim_data['symbol']
+        data = pd.DataFrame.from_dict(prelim_data['candles'])
+        return True, symbol, data
+    except KeyError:
+        print('symbol {} is invalid'.format(symbol))
+        return False, None, None
 
-    return symbol, data
 
 
 if __name__ == '__main__':
@@ -53,19 +57,19 @@ if __name__ == '__main__':
     filename = '../StockData/S&P_500_{}'.format(str(datetime.date.today()))
     if not os.path.exists(filename):
         datafile = h5py.File(filename)
-        datafile.attrs.create(name='SandP', data=grub_targets)
     else:
         print('Data file already exists!')
 
     for grubbie in grub_targets:
-        symbol, data = grub(symbol=grubbie)
+        success, symbol, data = grub(symbol=grubbie)
 
-        local_group = datafile.create_group(str(symbol))
-        print(local_group.name)
-        for key in data.keys():
-            local_dataset = local_group.create_dataset(name=key, shape=data[key].shape)
-            print(local_dataset.name)
-            local_dataset[...] = data[key]
+        if success:
+            local_group = datafile.create_group(str(symbol))
+            print(local_group.name)
+            for key in data.keys():
+                local_dataset = local_group.create_dataset(name=key, shape=data[key].shape)
+                print(local_dataset.name)
+                local_dataset[...] = data[key]
 
     datafile.close()
 
