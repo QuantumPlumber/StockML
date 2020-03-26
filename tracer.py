@@ -7,6 +7,7 @@ import Analytics
 
 importlib.reload(Analytics)
 
+
 def trace_oscillations(data, volume, threshold_down, threshold_up):
     threshold_distance = 0
     reversion_distance = 0
@@ -21,16 +22,17 @@ def trace_oscillations(data, volume, threshold_down, threshold_up):
     volume_record = []
 
     for i in np.arange(data.shape[0]):
-        #print('loop')
+        # print('loop')
         ##################################################################
         if data[i] > threshold_up:
-            #print('triggered')
+            # print('triggered')
             trigger_up = True
             threshold_distance += 1.
-            average_volume = average_volume * (threshold_distance-1)/threshold_distance + volume[i]/threshold_distance
+            average_volume = average_volume * (threshold_distance - 1) / threshold_distance + volume[
+                i] / threshold_distance
 
         if data[i] < threshold_up and trigger_up:
-            #print('triggered')
+            # print('triggered')
             trigger_up = False
             threshold_record.append(threshold_distance)
             volume_record.append(average_volume)
@@ -101,12 +103,14 @@ if __name__ == "__main__":
 
     candle_data = Analytics.candle_avg(open=data_open, high=data_high, low=data_low)
     candle_sma = Analytics.moving_average(data=candle_data, period=20)
-    candle_rail, _, candle_volume = trace_oscillations(data=candle_data-candle_sma,volume=data_volume,
-                                                       threshold_down=0, threshold_up=0)
+    candle_rail, _, candle_volume = trace_oscillations(data=candle_data - candle_sma,
+                                                       volume=data_volume,
+                                                       threshold_down=0,
+                                                       threshold_up=0)
 
     plt.scatter(candle_rail, candle_volume)
 
     plt.figure()
-    plt.hist(candle_rail, bins = 100)
+    plt.hist(candle_rail, bins=100)
     plt.figure()
-    plt.hist(candle_volume, bins = 100)
+    plt.hist(candle_volume, bins=100)

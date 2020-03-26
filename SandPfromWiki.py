@@ -25,15 +25,15 @@ def get_SandP500():
     # print(table)
 
     for row in table.findAll("tr"):
-        print('row:')
-        print(row)
+        #print('row:')
+        #print(row)
 
         if len(row.findAll('th')) > 0:
             continue
 
         cells = row.findAll("td")
-        print('cells:')
-        print(cells)
+        #print('cells:')
+        #print(cells)
         if len(cells) > 1:
             # for cell in cells:
             #    print(cell.find(text=True))
@@ -44,4 +44,4 @@ def get_SandP500():
 
 if __name__ == "__main__":
     symbol = get_SandP500()
-    print(symbol)
+    #print(symbol)

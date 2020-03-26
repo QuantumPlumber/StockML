@@ -8,6 +8,7 @@ import DataGrubbing.SandPfromWiki as SandPfromWiki
 import h5py
 import datetime
 import os
+import time
 
 importlib.reload(SandPfromWiki)
 
@@ -15,6 +16,8 @@ importlib.reload(SandPfromWiki)
 def grub(symbol='GOOG', startdate=1581921000000):
     # define endpoint
     price_endpoint = r'https://api.tdameritrade.com/v1/marketdata/{}/pricehistory'.format(symbol)
+
+    gm_time = tm.gmtime(time[i] * 1e-3)
 
     payload = {'apikey': apikey,
                'periodType ': 'day',
