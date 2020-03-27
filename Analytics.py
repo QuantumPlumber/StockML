@@ -2,10 +2,28 @@
 Calculate various technical signals, bollinger bands, moving averages, etc..
 
 '''
-
+import time
 import numpy as np
 import h5py
 
+def market_hours(t):
+    #print(t.shape)
+    tradeable = np.zeros_like(t, dtype=np.bool)
+    #print(tradeable.shape)
+
+    for i in np.arange(t.shape[0]):
+        gm_time = time.gmtime(t[i] * 1e-3)
+        # print(gm_time[4])
+
+        if gm_time[3] - 4 == 9 and gm_time[4] > 30 and (gm_time[3] - 4 < 10):
+            tradeable[i] = True
+        else:
+            tradeable[i] = False
+
+        if gm_time[3] - 4 >= 10 and (gm_time[3] - 4 < 16):
+            tradeable[i] = True
+
+    return tradeable
 
 def offset_price(data, period=20):
     '''

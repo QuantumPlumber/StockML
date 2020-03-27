@@ -37,9 +37,9 @@ def grub(symbol='GOOG', startdate=1581921000000):
     try:
         symbol = prelim_data['symbol']
         data = pd.DataFrame.from_dict(prelim_data['candles'])
-        print(data['datetime'])
-        print([datetime['datetime'] for datetime in prelim_data['candles']])
-        print(data.dtypes)
+        #print(data['datetime'])
+        #print([datetime['datetime'] for datetime in prelim_data['candles']])
+        #print(data.dtypes)
         return True, symbol, data
     except KeyError:
         print('symbol {} is invalid'.format(symbol))
@@ -79,7 +79,7 @@ def market_hours(t):
     return tradeable
 
 
-if __name__ == '__main__':
+def DailyDataGrubberFunc(lookback_days=1, grub_targets=[]):
     # symbol, data = grub(symbol='SPY')
 
     '''
@@ -89,7 +89,6 @@ if __name__ == '__main__':
         plt.plot(data['datetime'], data[key])
     '''
 
-    lookback_days = 2
     # caculate current date
     # today = datetime.datetime.today()
     # today = today.replace(hour=8, minute=0, second=0, microsecond=0)  # UCT time is 4 hours ahead of NYC. Military time
@@ -97,7 +96,7 @@ if __name__ == '__main__':
 
     today = arrow.now('America/New_York')
     today = today.replace(hour=0, minute=0, second=0, microsecond=0)
-    yesterday = today.shift(days=-lookback_days)
+    yesterday = today.shift(days=-int(lookback_days))
 
     print('Grubbing 24hrs of data from {}'.format(str(yesterday.date())))
 
@@ -105,8 +104,8 @@ if __name__ == '__main__':
     # epoch_time = (yesterday - datetime.datetime(1970, 1, 1)).total_seconds()  # convert to epoch time.
     # gm_time = time.gmtime(time[i] * 1e-3)
 
-    grub_targets = []
-    grub_targets.append('SPY')
+    #grub_targets = []
+    #grub_targets.append('SPY')
 
     '''File Handling'''
     # filename = '../StockData/S&P_500_{}'.format(str(datetime.date.today() - datetime.timedelta(days=lookback_days)))
@@ -118,8 +117,8 @@ if __name__ == '__main__':
         datafile = h5py.File(filename)
     else:
         print('Data file already exists!')
-        print('exiting program')
-        sys.exit()
+        print('skipping file')
+        return None
 
     successful_grubs = 0
     for grubbie in grub_targets:
@@ -143,3 +142,12 @@ if __name__ == '__main__':
     print('successfully grubbed {} tickers of the S&P 500'.format(successful_grubs))
 
     datafile.close()
+
+    return None
+
+
+if __name__ == '__main__':
+    grub_targets = []
+    grub_targets.append('SPY')
+
+    DailyDataGrubberFunc(lookback_days=1, grub_targets=grub_targets)
