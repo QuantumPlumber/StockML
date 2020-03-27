@@ -1,10 +1,10 @@
 import requests
-from utilities.config import apikey
+from config import apikey
 import pandas as pd
 import matplotlib.pyplot as plt
 import time
 import importlib
-import DataGrubbing.SandPfromWiki as SandPfromWiki
+import SandPfromWiki as SandPfromWiki
 import h5py
 import datetime
 import os
@@ -17,7 +17,7 @@ def grub(symbol='GOOG', startdate=1581921000000):
     # define endpoint
     price_endpoint = r'https://api.tdameritrade.com/v1/marketdata/{}/pricehistory'.format(symbol)
 
-    gm_time = tm.gmtime(time[i] * 1e-3)
+    #gm_time = time.gmtime(time[i] * 1e-3)
 
     payload = {'apikey': apikey,
                'periodType ': 'day',
@@ -57,7 +57,7 @@ if __name__ == '__main__':
     grub_dates = [1582551000000]
 
     '''File Handling'''
-    filename = '../StockData/S&P_500_{}'.format(str(datetime.date.today()))
+    filename = '../StockData/S&P_500_10Day_{}'.format(str(datetime.date.today()))
     if not os.path.exists(filename):
         datafile = h5py.File(filename)
     else:
