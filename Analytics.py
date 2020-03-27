@@ -7,6 +7,20 @@ import numpy as np
 import h5py
 
 
+def offset_price(data, period=20):
+    '''
+    calculate price difference between two points
+
+    :param data: input data
+    :param period: length of moving average
+    :return: moving average
+    '''
+    padded_data = np.concatenate((np.ones(period) * data[0], data))
+    price_change = padded_data[period:] - padded_data[:-period]
+
+    return price_change
+
+
 def moving_average(data, period=20):
     '''
     calculate moving average
