@@ -5,6 +5,7 @@ import numpy as np
 import time as tm
 import datetime
 import arrow
+import pandas
 
 
 def market_hours(time):
@@ -26,9 +27,10 @@ def market_hours(time):
 
 
 '''File Handling'''
-filedirectory = '../StockData/'
-filename = 'S&P_500_2020-03-16'
-filename = 'S&P_500_2020-03-24'
+filedirectory = '../StockData/10Day/'
+filename = 'S&P_500_10Day_2020-03-19'
+#filedirectory = '../StockData/'
+#filename = 'S&P_500_2020-03-02'
 filepath = filedirectory + filename
 if os.path.exists(filepath):
     datafile = h5py.File(filepath)
@@ -57,6 +59,8 @@ data = datafile[group_choice]['volume'][...]
 market_open = market_hours(time)
 datafile.close()
 
+
+
 print(time[0] == time[1])
 
 date_list = []
@@ -65,7 +69,7 @@ for i, t in enumerate(time):
     utc_time = arrow.get(t * 1e-3).to('utc')
     utc_time = utc_time.shift(hours=-4)  # must explicitely shift time for numpy to recognize
     # nyt_time = utc_time.to('America/New_York')
-    date_list.append(str(utc_time))
+    date_list.append(utc_time.time())
     '''
     date_list.append(datetime.datetime(year=gm_time[0],
                                        month=gm_time[1],
@@ -75,6 +79,7 @@ for i, t in enumerate(time):
                                        second=gm_time[5]))
     '''
 numpy_datetimes = np.array(date_list, dtype='datetime64')
+unique_dates = np.unique(numpy_datetimes)
 
 fig, axs = plt.subplots(nrows=2, sharex=True, figsize=(10, 5))
 plt.suptitle(group_choice + ' ' + dataset_choice)
