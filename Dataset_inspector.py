@@ -50,7 +50,7 @@ for group_key in datafile.keys():
     break
 
 group_choice = np.random.choice(list(datafile.keys()))
-group_choice = 'SPY'
+#group_choice = 'SPY'
 dataset_choice = np.random.choice(list(datafile[group_choice].keys()))
 
 time = datafile[group_choice]['datetime'][...]
@@ -69,7 +69,7 @@ for i, t in enumerate(time):
     utc_time = arrow.get(t * 1e-3).to('utc')
     utc_time = utc_time.shift(hours=-4)  # must explicitely shift time for numpy to recognize
     # nyt_time = utc_time.to('America/New_York')
-    date_list.append(utc_time.time())
+    date_list.append(utc_time.date())
     '''
     date_list.append(datetime.datetime(year=gm_time[0],
                                        month=gm_time[1],
@@ -79,7 +79,7 @@ for i, t in enumerate(time):
                                        second=gm_time[5]))
     '''
 numpy_datetimes = np.array(date_list, dtype='datetime64')
-unique_dates = np.unique(numpy_datetimes)
+#unique_dates = np.unique(numpy_datetimes)
 
 fig, axs = plt.subplots(nrows=2, sharex=True, figsize=(10, 5))
 plt.suptitle(group_choice + ' ' + dataset_choice)

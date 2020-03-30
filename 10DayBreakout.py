@@ -12,7 +12,7 @@ def breakout(filedirectory='../StockData/10Day/', breakout_directory='../StockDa
         if direntry.is_file():
             filepath = direntry.path
             try:
-                datafile = h5py.File(filepath)
+                datafile = h5py.File(filepath, 'r')
             except:
                 print('could not open file: {}'.format(filepath))
                 continue
