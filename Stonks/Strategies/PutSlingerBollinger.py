@@ -21,6 +21,7 @@ def Bollinger_strat(time,
                     sma_d,
                     candle, candle_high, candle_low,
                     parameters):
+
     print(parameters)
 
     put_buy_locs = []
@@ -94,23 +95,19 @@ def Bollinger_strat(time,
                         (put_price > put_thresholds['profit'] * put_buy_option_price[-1]
                          or sell_trigger):  # close put options
                 '''
-
-                #this is teh killler good one here!
                 if (put_price < parameters['stop_loss'] * max_put_price
                     and put_price <= put_buy_option_price[-1]) \
                         or \
                         (put_price > parameters['profit'] * max_put_price
                          and put_price > put_buy_option_price[-1]
                          and sma_d[i] >= 0.0):  # close put options
-                '''
-                if (put_price < parameters['stop_loss'] * put_buy_option_price[-1]):
                     # print('#############################################')
                     put_sell_locs.append(i)
                     put_sell_price.append(candle[i])
                     put_sell_option_price.append(put_price)
                     # print(put_price)
                     open_put_position = False
-                '''
+
         if (gm_time[3] - 4 == 16) and open_put_position:
             put_sell_locs.append(i)
             put_sell_price.append(candle[i])

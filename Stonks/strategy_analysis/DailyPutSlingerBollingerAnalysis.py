@@ -35,7 +35,7 @@ def slinger(ax, datafile, ticker, parameters):
     sma = Analytics.moving_average(data=candle, period=period)
     sma_short = Analytics.exp_moving_average(data=candle, alpha=.1, period=period // 3)
     sma_low_bollinger, sma_high_bollinger = Analytics.bollinger_bands(data=sma_short, average=sma)
-    sma_d = Analytics.derivative(sma, period=period)
+    sma_d = Analytics.derivative(sma, period=period // 6)
     # sma_d = Analytics.moving_average(sma_d, period=period // 6)
     sma_dd = Analytics.second_derivative(sma, period=period)
 
