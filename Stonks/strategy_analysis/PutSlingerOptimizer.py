@@ -7,6 +7,7 @@ import numpy as np
 from Stonks.Analytics import Analytics
 from Stonks.Strategies import PutSlinger
 
+
 import importlib
 
 importlib.reload(Analytics)

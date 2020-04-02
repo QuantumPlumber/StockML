@@ -6,10 +6,11 @@ import time
 import numpy as np
 import h5py
 
+
 def market_hours(t):
-    #print(t.shape)
+    # print(t.shape)
     tradeable = np.zeros_like(t, dtype=np.bool)
-    #print(tradeable.shape)
+    # print(tradeable.shape)
 
     for i in np.arange(t.shape[0]):
         gm_time = time.gmtime(t[i] * 1e-3)
@@ -24,6 +25,7 @@ def market_hours(t):
             tradeable[i] = True
 
     return tradeable
+
 
 def offset_price(data, period=20):
     '''
@@ -141,6 +143,16 @@ def second_derivative(data, period=20):
     derivative = np.zeros_like(data)
     for i in np.arange(start=period, stop=data.shape[0]):
         derivative[i] = (data[i] - 2 * data[i - period // 2] + data[i - period]) / period
+
+    derivative[0:period] = np.ones_like(period - 1) * derivative[period]
+
+    return derivative
+
+
+def third_derivative(data, period=20):
+    derivative = np.zeros_like(data)
+    for i in np.arange(start=period, stop=data.shape[0]):
+        derivative[i] = (data[i] - 2 * data[i - period // 3] + data[i - 2 * period // 3] - data[i - period]) / period
 
     derivative[0:period] = np.ones_like(period - 1) * derivative[period]
 

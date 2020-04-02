@@ -16,8 +16,12 @@ def instrument_price(sell_price, buy_price, base_price=6, delta=.5):
     return delta_price
 
 
-def SMA_strat(time, sma, sma_d, candle, candle_high, candle_low, stop_loss=.8, profit=1.2):
-    put_thresholds = {'buy': 5, 'stop_loss': stop_loss, 'profit': profit}
+def Bollinger_strat(time,
+                    sma, bollinger_up, bollinger_down,
+                    sma_d,
+                    candle, candle_high, candle_low,
+                    parameters):
+    print(parameters)
 
     put_buy_locs = []
     put_buy_price = []
@@ -30,14 +34,44 @@ def SMA_strat(time, sma, sma_d, candle, candle_high, candle_low, stop_loss=.8, p
     open_put_position = False
     put_price = 0
     max_put_price = 0
+    buy_armed = False
+    buy_trigger = False
+    sell_armed = False
+    sell_trigger = False
     for i in np.arange(sma.shape[0]):
         gm_time = tm.gmtime(time[i] * 1e-3)
         if (gm_time[3] - 4 > 9) and (gm_time[3] - 4 < 16):
 
-            delta = True
+            ############### Toggle buy ###########################
 
-            # if sma_d[i] < 0.0 and sma_d[i] > -0.03 and delta and not open_put_position:  # open put options
-            if sma_d[i] < 0.0 and delta and not open_put_position:  # open put options
+            threshold = 2 * (candle[i] - sma[i]) / np.absolute(bollinger_up[i] - bollinger_down[i])
+
+            if threshold > parameters['Bollinger_top']:
+                buy_armed = True
+
+            buy_trigger = False
+            if buy_armed and threshold <= parameters['Bollinger_top']:
+                print(threshold)
+                buy_trigger = True
+
+            if threshold < parameters['Bollinger_top']:
+                buy_armed = False
+
+            ############### Toggle Sell ###########################
+
+            if threshold < parameters['Bollinger_bot']:
+                sell_armed = True
+
+            sell_trigger = False
+            if sell_armed and threshold >= parameters['Bollinger_bot']:
+                sell_trigger = True
+
+            if threshold > parameters['Bollinger_bot']:
+                sell_armed = False
+
+            ############### implement buy & sell ###########################
+
+            if buy_trigger and not open_put_position:  # open put options
                 put_buy_locs.append(i)
                 put_price = instrument_price(candle[i], candle[i], base_price=3, delta=.5)
                 # print(put_price)
@@ -53,19 +87,30 @@ def SMA_strat(time, sma, sma_d, candle, candle_high, candle_low, stop_loss=.8, p
                 if put_price >= max_put_price:
                     max_put_price = put_price
                 # print(put_price)
+                '''
                 if (put_price < put_thresholds['stop_loss'] * max_put_price
                     and put_price <= put_buy_option_price[-1]) \
                         or \
-                        (put_price > put_thresholds['profit'] * max_put_price
+                        (put_price > put_thresholds['profit'] * put_buy_option_price[-1]
+                         or sell_trigger):  # close put options
+                '''
+
+                #this is teh killler good one here!
+                if (put_price < parameters['stop_loss'] * max_put_price
+                    and put_price <= put_buy_option_price[-1]) \
+                        or \
+                        (put_price > parameters['profit'] * max_put_price
                          and put_price > put_buy_option_price[-1]
                          and sma_d[i] >= 0.0):  # close put options
+                '''
+                if (put_price < parameters['stop_loss'] * put_buy_option_price[-1]):
                     # print('#############################################')
                     put_sell_locs.append(i)
                     put_sell_price.append(candle[i])
                     put_sell_option_price.append(put_price)
                     # print(put_price)
                     open_put_position = False
-
+                '''
         if (gm_time[3] - 4 == 16) and open_put_position:
             put_sell_locs.append(i)
             put_sell_price.append(candle[i])
@@ -109,14 +154,14 @@ if __name__ == "__main__":
     sma_d = Analytics.derivative(data, period=period)
     sma_dd = Analytics.second_derivative(data, period=period)
 
-    results_list = SMA_strat(time=time,
-                             sma=sma,
-                             sma_d=sma_d,
-                             candle=data,
-                             candle_high=candle_low_bollinger,
-                             candle_low=candle_high_bollinger,
-                             stop_loss=.8,
-                             profit=1.2)
+    results_list = Bollinger_strat(time=time,
+                                   sma=sma,
+                                   sma_d=sma_d,
+                                   candle=data,
+                                   candle_high=candle_low_bollinger,
+                                   candle_low=candle_high_bollinger,
+                                   stop_loss=.8,
+                                   profit=1.2)
 
     put_buy_locs = results_list[0]
     put_buy_price = results_list[1]
