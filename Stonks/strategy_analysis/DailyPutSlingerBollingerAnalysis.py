@@ -44,7 +44,7 @@ def slinger(ax, datafile, ticker, parameters):
                                                        bollinger_up=sma_high_bollinger,
                                                        bollinger_down=sma_low_bollinger,
                                                        sma_d=sma_d,
-                                                       candle=sma_short,
+                                                       candle=candle,
                                                        candle_high=candle_high_bollinger,
                                                        candle_low=candle_low_bollinger,
                                                        parameters=parameters)
@@ -148,7 +148,8 @@ if __name__ == "__main__":
     ticker = 'SPY'
     # group_choice = np.random.choice(list(datafile.keys()))
 
-    parameters = {'Bollinger_top': .0, 'Bollinger_bot': -0.8, 'stop_loss': .8, 'profit': 1.8}
+    parameters = {'Bollinger_top': .0, 'Bollinger_bot': -.8, 'stop_loss': .8, 'profit': 1.8}
+    parameters = {'Bollinger_top': .0, 'Bollinger_bot': -.8, 'stop_loss': .8, 'profit': 1.8}
 
     days_in_directory = DailyGenerator.days_in_directory(filedirectory='D:/StockData/', ticker=ticker)
     fig, axs = plt.subplots(nrows=days_in_directory, ncols=2, sharex=False, figsize=(30, int(4 * days_in_directory)))

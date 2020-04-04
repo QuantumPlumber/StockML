@@ -71,7 +71,7 @@ def Bollinger_strat(time,
 
             ############### implement buy & sell ###########################
 
-            if buy_trigger and sma_d[i] < 0 and not open_put_position:  # open put options
+            if buy_trigger and not open_put_position:  # open put options
                 put_buy_locs.append(i)
                 put_price = instrument_price(candle[i], candle[i], base_price=3, delta=.5)
                 # print(put_price)
@@ -110,7 +110,7 @@ def Bollinger_strat(time,
                 '''
 
                 if (put_price < parameters['stop_loss'] * max_put_price
-                    and put_price <= put_buy_option_price[-1]) or (sell_trigger and sma_d[i] >= 0):  # close put options
+                    and put_price <= put_buy_option_price[-1]) or sell_trigger:  # close put options
                     # print('#############################################')
                     put_sell_locs.append(i)
                     put_sell_price.append(candle[i])
