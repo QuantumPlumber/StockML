@@ -33,8 +33,6 @@ def Bollinger_strat(time,
     put_sell_price = []
     put_sell_option_price = []
 
-    positions_list = []
-
     open_put_position = False
     put_price = 0
     max_put_price = 0
@@ -45,7 +43,6 @@ def Bollinger_strat(time,
     for i in np.arange(sma.shape[0]):
         gm_time = tm.gmtime(time[i] * 1e-3)
         if (gm_time[3] - 4 > 9) and (gm_time[3] - 4 < 16):
-            current_time = ((gm_time[3] - 4) * 60 + gm_time[4]) - (9 * 60)  # in minutes from open
 
             ############### Toggle buy ###########################
 
@@ -76,27 +73,21 @@ def Bollinger_strat(time,
 
             ############### implement buy & sell ###########################
 
-            if buy_trigger and not open_put_position:  # open put options
-
-                strike_price = (candle[i] + bollinger_down[i]) / 2.
-
-                strike_price = candle[i] - 2*(candle[i] - bollinger_down[i])
-
-                new_put = position.position(strike_price=strike_price,
-                                            volatility=.001,
-                                            t=current_time,
-                                            stock_price=candle[i],
-                                            expiration=60 * 7 + 31,
-                                            stop_loss=parameters['stop_loss'],
-                                            stop_profit=parameters['profit'])
-
-                positions_list.append(new_put)
+            if buy_trigger and sma_d[i] < 0 and not open_put_position:  # open put options
                 put_buy_locs.append(i)
+                put_price = instrument_price(candle[i], candle[i], base_price=3, delta=.5)
+                # print(put_price)
+                max_put_price = put_price
+                # print(put_price)
+                put_buy_option_price.append(put_price)
+                put_buy_price.append(candle[i])
                 open_put_position = True
 
             if open_put_position:
-                put_price = positions_list[-1].compute_price(t=current_time, stock_price=candle[i])
+                put_price = instrument_price(candle[i], put_buy_price[-1], base_price=3, delta=.5)
                 # print(put_price)
+                if put_price >= max_put_price:
+                    max_put_price = put_price
                 # print(put_price)
                 '''
                 if (put_price < put_thresholds['stop_loss'] * max_put_price
@@ -120,30 +111,20 @@ def Bollinger_strat(time,
                     open_put_position = False
                 '''
 
-                if positions_list[-1].check_stop_loss(candle[i]) or positions_list[-1].check_stop_profit(candle[i]) or (
-                        sell_trigger):  # close put options
+                if (put_price < parameters['stop_loss'] * max_put_price
+                    and put_price <= put_buy_option_price[-1]) or (sell_trigger and sma_d[i] >= 0):  # close put options
                     # print('#############################################')
-                    positions_list[-1].close_position(candle[i])
                     put_sell_locs.append(i)
+                    put_sell_price.append(candle[i])
+                    put_sell_option_price.append(put_price)
                     # print(put_price)
                     open_put_position = False
-                    # print('closed')
 
         if (gm_time[3] - 4 == 16) and open_put_position:
             put_sell_locs.append(i)
-            positions_list[-1].close_position(candle[i])
+            put_sell_price.append(candle[i])
+            put_sell_option_price.append(put_price)
             open_put_position = False
-            print('closed')
-
-    print('number of positions: {}'.format(len(positions_list)))
-
-    for pos in positions_list:
-        if pos.position_closed == False:
-            print('position not closed.')
-        put_buy_price.append(pos.stock_price_at_open)
-        put_buy_option_price.append(pos.value_history[0])
-        put_sell_price.append(pos.stock_price_at_close)
-        put_sell_option_price.append(pos.value_history[-1])
 
     return [np.array(put_buy_locs), np.array(put_buy_price), np.array(put_buy_option_price),
             np.array(put_sell_locs), np.array(put_sell_price), np.array(put_sell_option_price)]

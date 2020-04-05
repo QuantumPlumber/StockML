@@ -33,7 +33,7 @@ def slinger(ax, datafile, ticker, parameters):
                                                                                    period=30)
     period = 30
     sma = Analytics.moving_average(data=candle, period=period)
-    sma_short = Analytics.exp_moving_average(data=candle, alpha=.1, period=period // 3)
+    sma_short = Analytics.moving_average(data=candle, period=period // 3)
     sma_low_bollinger, sma_high_bollinger = Analytics.bollinger_bands(data=sma_short, average=sma)
     sma_d = Analytics.derivative(sma, period=period // 6)
     # sma_d = Analytics.moving_average(sma_d, period=period // 6)
@@ -149,7 +149,7 @@ if __name__ == "__main__":
     # group_choice = np.random.choice(list(datafile.keys()))
 
     parameters = {'Bollinger_top': .0, 'Bollinger_bot': -.8, 'stop_loss': .8, 'profit': 1.8}
-    parameters = {'Bollinger_top': .0, 'Bollinger_bot': -.8, 'stop_loss': .8, 'profit': 1.8}
+    parameters = {'Bollinger_top': .2, 'Bollinger_bot': -.4, 'stop_loss': .8, 'profit': .8}
 
     days_in_directory = DailyGenerator.days_in_directory(filedirectory='D:/StockData/', ticker=ticker)
     fig, axs = plt.subplots(nrows=days_in_directory, ncols=2, sharex=False, figsize=(30, int(4 * days_in_directory)))
@@ -161,5 +161,7 @@ if __name__ == "__main__":
         daily_percent_gain.append(slinger(ax=ax_row, datafile=datafile, ticker=ticker, parameters=parameters))
 
     print(daily_percent_gain)
-    total_profit = np.product(1 + np.array(daily_percent_gain))
+    array_profit = np.array(daily_percent_gain)
+    array_profit[np.isnan(array_profit)] = 0
+    total_profit = np.product(1 + array_profit)
     print('total \% profit over {}-day period is : {}'.format(len(daily_percent_gain), total_profit))
