@@ -7,10 +7,10 @@ import numpy as np
 from Stonks.Analytics import Analytics
 import time as tm
 import importlib
-from Stonks.Positions import position
+from Stonks.Positions import position_class
 
 importlib.reload(Analytics)
-importlib.reload(position)
+importlib.reload(position_class)
 
 
 def instrument_price(sell_price, buy_price, base_price=6, delta=.5):
@@ -19,7 +19,8 @@ def instrument_price(sell_price, buy_price, base_price=6, delta=.5):
 
 
 def Bollinger_strat(time,
-                    sma, bollinger_up, bollinger_down,
+                    sma, sma_short,
+                    bollinger_up, bollinger_down,
                     sma_d,
                     candle, candle_high, candle_low,
                     parameters):
@@ -28,6 +29,7 @@ def Bollinger_strat(time,
     put_buy_locs = []
     put_buy_price = []
     put_buy_option_price = []
+    put_strike_price = []
 
     put_sell_locs = []
     put_sell_price = []
@@ -49,7 +51,7 @@ def Bollinger_strat(time,
 
             ############### Toggle buy ###########################
 
-            threshold = 2 * (candle[i] - sma[i]) / np.absolute(bollinger_up[i] - bollinger_down[i])
+            threshold = 2 * (sma_short[i] - sma[i]) / np.absolute(bollinger_up[i] - bollinger_down[i])
 
             if threshold > parameters['Bollinger_top']:
                 buy_armed = True
@@ -78,17 +80,22 @@ def Bollinger_strat(time,
 
             if buy_trigger and not open_put_position:  # open put options
 
-                strike_price = (candle[i] + bollinger_down[i]) / 2.
+                #strike_price = (candle[i] + bollinger_down[i]) / 2.
 
-                strike_price = candle[i] - 2*(candle[i] - bollinger_down[i])
+                strike_delta = 2*(candle[i] - bollinger_down[i])
+                if strike_delta >= 6:
+                    strike_delta = 6
 
-                new_put = position.position(strike_price=strike_price,
-                                            volatility=.001,
-                                            t=current_time,
-                                            stock_price=candle[i],
-                                            expiration=60 * 7 + 31,
-                                            stop_loss=parameters['stop_loss'],
-                                            stop_profit=parameters['profit'])
+                strike_price = candle[i] - strike_delta
+
+
+                new_put = position_class.position(strike_price=strike_price,
+                                                  volatility=.001,
+                                                  t=current_time,
+                                                  stock_price=candle[i],
+                                                  expiration=60 * 7 + 31,
+                                                  stop_loss=parameters['stop_loss'],
+                                                  stop_profit=parameters['profit'])
 
                 positions_list.append(new_put)
                 put_buy_locs.append(i)
@@ -120,7 +127,7 @@ def Bollinger_strat(time,
                     open_put_position = False
                 '''
 
-                if positions_list[-1].check_stop_loss(candle[i]) or positions_list[-1].check_stop_profit(candle[i]) or (
+                if positions_list[-1].check_stop_loss() or positions_list[-1].check_stop_profit() or (
                         sell_trigger):  # close put options
                     # print('#############################################')
                     positions_list[-1].close_position(candle[i])
@@ -144,9 +151,11 @@ def Bollinger_strat(time,
         put_buy_option_price.append(pos.value_history[0])
         put_sell_price.append(pos.stock_price_at_close)
         put_sell_option_price.append(pos.value_history[-1])
+        put_strike_price.append(pos.strike_price)
 
     return [np.array(put_buy_locs), np.array(put_buy_price), np.array(put_buy_option_price),
-            np.array(put_sell_locs), np.array(put_sell_price), np.array(put_sell_option_price)]
+            np.array(put_sell_locs), np.array(put_sell_price), np.array(put_sell_option_price),
+            np.array(put_strike_price)]
 
 
 if __name__ == "__main__":

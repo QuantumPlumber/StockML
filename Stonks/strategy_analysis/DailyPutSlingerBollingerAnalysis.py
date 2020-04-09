@@ -41,6 +41,7 @@ def slinger(ax, datafile, ticker, parameters):
 
     results_list = PutSlingerBollinger.Bollinger_strat(time=time,
                                                        sma=sma,
+                                                       sma_short=sma_short,
                                                        bollinger_up=sma_high_bollinger,
                                                        bollinger_down=sma_low_bollinger,
                                                        sma_d=sma_d,
@@ -51,22 +52,28 @@ def slinger(ax, datafile, ticker, parameters):
 
     put_buy_locs = results_list[0]
     put_buy_price = results_list[1]
-    # print(put_buy_price)
     put_buy_option_price = results_list[2]
-    print(put_buy_option_price)
 
     put_sell_locs = results_list[3]
     put_sell_price = results_list[4]
-    # print(put_sell_price)
     put_sell_option_price = results_list[5]
-    print(put_sell_option_price)
+
+    print('stock price at open: {}'.format(put_buy_price))
+    print('strike price: {}'.format(results_list[6]))
+    print('stock price at close: {}'.format(put_sell_price))
+
+    print('option cost at open: {}'.format(put_buy_option_price))
+    print('option cost at close: {}'.format(put_sell_option_price))
 
     put_profits = (put_sell_option_price - put_buy_option_price)
 
     put_percent = (put_sell_option_price - put_buy_option_price) / put_buy_option_price
-    print(put_percent)
+    print('option % gain: {}'.format(put_percent))
+
+    put_percent[put_percent > 5] = 5 # put an upper bound on the option returns.
+
     put_percent_avg = np.sum(put_percent) / put_percent.shape[0]
-    print(put_percent_avg)
+    print('average option % gain: {}'.format(put_percent_avg))
 
     results_list.append(put_percent)
     results_list.append(put_percent_avg)
@@ -109,11 +116,11 @@ def slinger(ax, datafile, ticker, parameters):
 
     profit_put_buy_locs = put_buy_locs[put_profits >= 0]
     put_cut = profit_put_buy_locs[profit_put_buy_locs > focus_top]
-    ax[0].plot(time[put_cut], candle[put_cut], '>', color='r')
+    ax[0].plot(time[put_cut], candle[put_cut], '>', color='k')
 
     profit_put_sell_locs = put_sell_locs[put_profits >= 0]
     put_cut = profit_put_sell_locs[profit_put_sell_locs > focus_top]
-    ax[0].plot(time[put_cut], candle[put_cut], '<', color='g')
+    ax[0].plot(time[put_cut], candle[put_cut], '<', color='k')
 
     ax[0].legend()
 
@@ -121,6 +128,13 @@ def slinger(ax, datafile, ticker, parameters):
     # plt.figure(figsize=(20, 10))
     # plt.suptitle('loss trades')
     # ax[1].plot(time, data_volume, '.')
+
+    ax_twin = ax[1].twinx()
+    ax_twin.plot(time[tradeable], Bollinger_oscillator[tradeable])
+    ax_twin.plot(time[tradeable], np.ones_like(time[tradeable]) * parameters['Bollinger_top'], color='k')
+    ax_twin.plot(time[tradeable], np.ones_like(time[tradeable]) * parameters['Bollinger_bot'], color='k')
+
+
     ax[1].plot(time[tradeable], candle[tradeable], '.', label=str(put_percent_avg))
     ax[1].plot(time[tradeable], sma[tradeable])
     ax[1].plot(time[tradeable], sma_low_bollinger[tradeable])
@@ -130,11 +144,11 @@ def slinger(ax, datafile, ticker, parameters):
 
     loss_put_buy_locs = put_buy_locs[put_profits < 0]
     put_cut = loss_put_buy_locs[loss_put_buy_locs > focus_top]
-    ax[1].plot(time[put_cut], candle[put_cut], '>', color='r')
+    ax[1].plot(time[put_cut], candle[put_cut], '>', color='k')
 
     loss_put_sell_locs = put_sell_locs[put_profits < 0]
     put_cut = loss_put_sell_locs[loss_put_sell_locs > focus_top]
-    ax[1].plot(time[put_cut], candle[put_cut], '<', color='g')
+    ax[1].plot(time[put_cut], candle[put_cut], '<', color='k')
 
     ax[1].legend()
 
@@ -149,7 +163,7 @@ if __name__ == "__main__":
     # group_choice = np.random.choice(list(datafile.keys()))
 
     parameters = {'Bollinger_top': .0, 'Bollinger_bot': -.8, 'stop_loss': .8, 'profit': 1.8}
-    parameters = {'Bollinger_top': .2, 'Bollinger_bot': -.4, 'stop_loss': .8, 'profit': .8}
+    parameters = {'Bollinger_top': .0, 'Bollinger_bot': -2.0, 'stop_loss': .2, 'profit': .5}
 
     days_in_directory = DailyGenerator.days_in_directory(filedirectory='D:/StockData/', ticker=ticker)
     fig, axs = plt.subplots(nrows=days_in_directory, ncols=2, sharex=False, figsize=(30, int(4 * days_in_directory)))
@@ -164,4 +178,4 @@ if __name__ == "__main__":
     array_profit = np.array(daily_percent_gain)
     array_profit[np.isnan(array_profit)] = 0
     total_profit = np.product(1 + array_profit)
-    print('total \% profit over {}-day period is : {}'.format(len(daily_percent_gain), total_profit))
+    print('total value over {}-day period is : {}'.format(len(daily_percent_gain), total_profit))

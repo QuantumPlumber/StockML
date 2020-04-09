@@ -7,10 +7,10 @@ import numpy as np
 from Stonks.Analytics import Analytics
 import time as tm
 import importlib
-from Stonks.Positions import position
+from Stonks.Positions import position_class
 
 importlib.reload(Analytics)
-importlib.reload(position)
+importlib.reload(position_class)
 
 
 def instrument_price(sell_price, buy_price, base_price=6, delta=.5):

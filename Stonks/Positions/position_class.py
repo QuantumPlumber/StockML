@@ -60,15 +60,16 @@ class position():
             # print(binomial_tree)
 
         option_price = binomial_tree[0]
+
         self.value_history.append(option_price)
 
         return option_price
 
-    def check_stop_loss(self, stock_price):
+    def check_stop_loss(self):
         if self.value_history[-1] <= self.stop_loss * self.value_history[0]:
             return True
 
-    def check_stop_profit(self, stock_price):
+    def check_stop_profit(self):
         if self.value_history[-1] <= self.stop_profit * np.max(np.array(self.value_history)):
             return True
 
