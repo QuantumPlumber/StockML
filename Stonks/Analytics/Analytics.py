@@ -55,6 +55,23 @@ def moving_average(data, period=20):
 
     return moving_avg
 
+def moving_average_update(old_data, old_avg, new_data, period=20):
+    '''
+    update the moving average
+
+    :param data:
+    :param period:
+    :return:
+    '''
+
+    working_data = old_data[-period:]
+    cumulative_data = np.cumsum(working_data)
+    working_moving_avg = (cumulative_data[period:] - cumulative_data[:-period]) / period
+
+    moving_avg = np.concatenate((old_avg, working_moving_avg))
+
+    return moving_avg
+
 
 def multi_average(data, periods):
     sma_list = []

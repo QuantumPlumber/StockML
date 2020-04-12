@@ -51,3 +51,8 @@ class AccountError(Exception):
 
         if 'id_error' in kw_arg_list.keys():
             print('account_id not defined')
+            print(self.__traceback__)
+
+        if 'header_error' in kw_arg_list.keys():
+            print('account_id not defined')
+            print(self.__traceback__)

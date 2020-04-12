@@ -2,6 +2,7 @@ import script_context
 
 from Stonks.Analytics import Analytics
 import numpy as np
+import timeit
 
 
 class analysis():
@@ -47,12 +48,45 @@ class analysis():
                 else:
                     continue
 
+    def timing_test(self, iterations=100):
+        '''
+        time the computation to check if it is lagging
+
+        :return:
+        '''
+
+        seconds_in_a_trading_day = (6 * 60 + 30) * 60
+        compute_dict = {'time': np.arange(seconds_in_a_trading_day),
+                        'data': np.random.random(size=seconds_in_a_trading_day),
+                        'sma': [10, 20, 30],
+                        'derivative': [[10, 10], [20, 20], [30, 30]],
+                        'Bollinger': [[30, 5, 10], [30, 10, 10], [30, 15, 10]]}
+
+        def dummy_func():
+            self.compute_analytics(compute_dict=compute_dict)
+
+        # test_instance.compute_analytics(compute_dict=compute_dict)
+        result = timeit.Timer(dummy_func).timeit(number=iterations)
+        return result, result / iterations
+
 
 if __name__ == '__main__':
-    compute_dict = {'time': np.arange(1000),
-                    'data': np.arange(1000),
+    seconds_in_a_trading_day = (6 * 60 + 30) * 60
+    compute_dict = {'time': np.arange(seconds_in_a_trading_day),
+                    'data': np.random.random(size=seconds_in_a_trading_day),
                     'sma': [10, 20, 30],
                     'derivative': [[10, 10], [20, 20], [30, 30]],
                     'Bollinger': [[30, 5, 10], [30, 10, 10], [30, 15, 10]]}
 
     test_instance = analysis(compute_dict)
+    print(test_instance.timing_test())
+
+    '''
+    iterations = 100
+
+    #test_instance.compute_analytics(compute_dict=compute_dict)
+    result = timeit.timeit('test_instance.compute_analytics(compute_dict=compute_dict)',
+                           setup="from __main__ import test_instance, compute_dict", number=iterations)
+
+    print(result/iterations)
+    '''
