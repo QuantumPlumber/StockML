@@ -12,6 +12,7 @@ from selenium import webdriver
 import importlib
 import h5py
 import os
+import sys
 import time
 import sys
 import arrow
@@ -46,6 +47,7 @@ class UtilityClass():
         # login & authentication variables
         ################################################################################################################
         self.account_authenticated = False
+        self.refresh_token_filename = 'refToken.txt'
 
         ################################################################################################################
         # account variables
@@ -197,6 +199,53 @@ class UtilityClass():
             self.token_data = self.authenticate_reply.json()
             self.access_token = self.token_data['access_token']
             self.access_header = {'Authorization': "Bearer {}".format(self.access_token)}
+            self.refresh_token = self.token_data['refresh_token']
+            if self.verbose: print(self.access_header)
+
+            self.utility_path = os.getcwd()
+            filepath = self.utility_path + '/' + self.refresh_token_filename
+            file = open(filepath, mode='w')
+            file.write(self.refresh_token)
+            file.close()
+
+            self.account_authenticated = True
+
+        else:
+            raise utility_exceptions.AccessError(url=self.token_endpoint, headers=headers, data=payload)
+
+    def refresh_authentication(self):
+        '''
+        Use the refresh token to get a new access_token
+
+        :return:
+        '''
+
+        try:
+            self.refresh_token
+        except AttributeError:
+            if self.verbose: print('refresh token not initialized')
+            raise utility_exceptions.AccountError(refresh_token_error=True)
+
+        # create access point url
+        self.token_endpoint = r'https://api.tdameritrade.com/v1/oauth2/token'
+
+        # define headers
+        headers = {'content-type': "application/x-www-form-urlencoded"}
+
+        # define payload
+        payload = {'grant_type': 'refresh_token',
+                   'access_type': 'offline',
+                   'refresh_token': self.refresh_token,
+                   'client_id': apikey,
+                   'redirect_uri': 'http://localhost/callback'}
+
+        # POST data to get access token
+        self.authenticate_reply = requests.post(url=self.token_endpoint, headers=headers, data=payload)
+        if self.authenticate_reply.status_code == utility_exceptions.AccessSuccess.account_success.value:
+            # convert json reply to dictionary
+            self.token_data = self.authenticate_reply.json()
+            self.access_token = self.token_data['access_token']
+            self.access_header = {'Authorization': "Bearer {}".format(self.access_token)}
             if self.verbose: print(self.access_header)
 
             self.account_authenticated = True
@@ -204,10 +253,28 @@ class UtilityClass():
         else:
             raise utility_exceptions.AccessError(url=self.token_endpoint, headers=headers, data=payload)
 
+    def check_for_refresh_token(self):
+        self.utility_path = os.getcwd()
+        filepath = self.utility_path + '/' + self.refresh_token_filename
+        if self.verbose: print(filepath)
+
+        if os.path.isfile(filepath):
+            file = open(filepath, mode='r')
+            if self.verbose: print('opened file at: {}'.format(filepath))
+            self.refresh_token = file.readline()
+            file.close()
+            return True
+        else:
+            if self.verbose: print('no refresh token file detected at {}'.format(filepath))
+            return False
+
     def login(self):
-        self.open_browser()
-        self.credential()
-        self.authenticate()
+        if not self.check_for_refresh_token():
+            self.open_browser()
+            self.credential()
+            self.authenticate()
+        else:
+            self.refresh_authentication()
 
     ####################################################################################################################
     ####################################################################################################################
@@ -633,7 +700,7 @@ class UtilityClass():
         else:
             raise utility_exceptions.AccessError(ErrorCode=self.account_reply.status_code,
                                                  url=self.saved_order_endpoint,
-                                                 headers=self.access_header)
+                                                 headers=self.order_access_header)
 
         # record whether the the order state has changed
         self.orders_state_has_changed = True
@@ -651,9 +718,15 @@ class UtilityClass():
     ####################################################################################################################
 
     def get_price_history(self, symbol, payload):
+        try:
+            self.access_header
+        except AttributeError:
+            if self.verbose: print('access header not defined')
+            raise utility_exceptions.AccountError(header_error=True)
+
         self.price_history_endpoint = r'https://api.tdameritrade.com/v1/marketdata/{}/pricehistory'.format(symbol)
 
-        self.account_reply = requests.get(url=self.price_history_endpoint, params=payload)
+        self.account_reply = requests.get(url=self.price_history_endpoint, params=payload, headers=self.access_header)
         if self.account_reply.status_code == utility_exceptions.AccessSuccess.account_success.value:
             # read out the status of the request
             if self.verbose: print(self.account_reply.status_code)
@@ -677,12 +750,36 @@ class UtilityClass():
 
         self.options_chain_endpoint = r'https://api.tdameritrade.com/v1/marketdata/chains'
 
+        # post the request
+        self.account_reply = requests.get(url=self.options_chain_endpoint, params=payload,
+                                          headers=self.access_header)
+        if self.account_reply.status_code == utility_exceptions.AccessSuccess.account_success.value:
+            # read out the status of the request
+            if self.verbose: print(self.account_reply.status_code)
+
+            return self.account_reply.json()
+
+        else:
+            raise utility_exceptions.AccessError(ErrorCode=self.account_reply.status_code,
+                                                 url=self.options_chain_endpoint,
+                                                 headers=self.options_access_header)
+
+    def get_quote(self, symbol):
+        try:
+            self.access_header
+        except AttributeError:
+            if self.verbose: print('access header not defined')
+            raise utility_exceptions.AccountError(header_error=True)
+
+        self.quote_endpoint = r'https://api.tdameritrade.com/v1/marketdata/{}/quotes'.format(symbol)
+
         # add a line to describe the type of request to the website
         self.options_access_header = self.access_header.copy()
         self.options_access_header['Content-Type'] = 'application/json'
 
         # post the request
-        self.account_reply = requests.get(url=self.options_chain_endpoint, params=payload)
+        self.account_reply = requests.get(url=self.quote_endpoint,
+                                          headers=self.access_header)
         if self.account_reply.status_code == utility_exceptions.AccessSuccess.account_success.value:
             # read out the status of the request
             if self.verbose: print(self.account_reply.status_code)
@@ -750,6 +847,14 @@ class UtilityClass():
                    'fromDate': today.format(),
                    'toDate': day_after_tomorrow.format()}
 
+        payload = {'symbol': 'SPY',
+                   'contractType': 'PUT',
+                   'strikeCount': 10,
+                   'includeQuotes': 'TRUE',
+                   'strategy': 'SINGLE',
+                   'fromDate': today.format(),
+                   'toDate': day_after_tomorrow.format()}
+
         self.get_options_chain(payload=payload)
 
     def test_order(self):
@@ -776,5 +881,5 @@ class UtilityClass():
 if __name__ == "__main__":
     utility_instance = UtilityClass()
     utility_instance.login()
-    utility_instance.get_account()
-    utility_instance.test_options_chain()
+    # utility_instance.get_account()
+    # utility_instance.test_options_chain()
