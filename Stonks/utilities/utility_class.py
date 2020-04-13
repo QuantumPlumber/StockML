@@ -192,7 +192,7 @@ class UtilityClass():
 
         # POST data to get access token
         self.authenticate_reply = requests.post(url=self.token_endpoint, headers=headers, data=payload)
-        if self.authenticate_reply.status_code == utility_exceptions.AccessSuccess.order_success.value:
+        if self.authenticate_reply.status_code == utility_exceptions.AccessSuccess.account_success.value:
             # convert json reply to dictionary
             self.token_data = self.authenticate_reply.json()
             self.access_token = self.token_data['access_token']
@@ -239,7 +239,7 @@ class UtilityClass():
 
         # POST data to get access token
         self.account_reply = requests.get(url=self.accounts_endpoint, headers=self.access_header)
-        if self.account_reply.status_code == utility_exceptions.AccessSuccess.order_success.value:
+        if self.account_reply.status_code == utility_exceptions.AccessSuccess.account_success.value:
             self.account_data = self.account_reply.json()
             if self.verbose: print(self.account_data)
         else:
@@ -272,7 +272,7 @@ class UtilityClass():
 
         # POST data to get access token
         self.account_reply = requests.get(url=self.account_endpoint, headers=self.access_header)
-        if self.account_reply.status_code == utility_exceptions.AccessSuccess.order_success.value:
+        if self.account_reply.status_code == utility_exceptions.AccessSuccess.account_success.value:
             self.account_data_dict[str(account_id)] = self.account_reply.json()
             if self.verbose: print(self.account_data)
         else:
@@ -654,7 +654,7 @@ class UtilityClass():
         self.price_history_endpoint = r'https://api.tdameritrade.com/v1/marketdata/{}/pricehistory'.format(symbol)
 
         self.account_reply = requests.get(url=self.price_history_endpoint, params=payload)
-        if self.account_reply.status_code == utility_exceptions.AccessSuccess.order_success.value:
+        if self.account_reply.status_code == utility_exceptions.AccessSuccess.account_success.value:
             # read out the status of the request
             if self.verbose: print(self.account_reply.status_code)
 
@@ -681,32 +681,9 @@ class UtilityClass():
         self.options_access_header = self.access_header.copy()
         self.options_access_header['Content-Type'] = 'application/json'
 
-        # define the payload
-        '''
-        payload = {
-            "complexOrderStrategyType": "NONE",
-            "orderType": "LIMIT",
-            "session": "NORMAL",
-            "price": "6.45",
-            "duration": "DAY",
-            "orderStrategyType": "SINGLE",
-            "orderLegCollection": [
-                {
-                    "instruction": "BUY_TO_OPEN",
-                    "quantity": 10,
-                    "instrument": {
-                        "symbol": "XYZ_032015C49",
-                        "assetType": "OPTION"
-                    }
-                }
-            ]
-        }
-        '''
-
         # post the request
-        self.account_reply = requests.post(url=self.options_chain_endpoint, json=payload,
-                                           headers=self.options_access_header)
-        if self.account_reply.status_code == utility_exceptions.AccessSuccess.order_success.value:
+        self.account_reply = requests.get(url=self.options_chain_endpoint, params=payload)
+        if self.account_reply.status_code == utility_exceptions.AccessSuccess.account_success.value:
             # read out the status of the request
             if self.verbose: print(self.account_reply.status_code)
 
@@ -714,8 +691,8 @@ class UtilityClass():
 
         else:
             raise utility_exceptions.AccessError(ErrorCode=self.account_reply.status_code,
-                                                 url=self.saved_order_endpoint,
-                                                 headers=self.access_header)
+                                                 url=self.options_chain_endpoint,
+                                                 headers=self.options_access_header)
 
     ####################################################################################################################
     ####################################################################################################################
@@ -758,9 +735,24 @@ class UtilityClass():
 
         history = self.get_price_history('SPY', payload=payload)
 
+    def test_options_chain(self):
+        today = arrow.now('America/New_York')
+        today = today.replace(hour=0, minute=0, second=0, microsecond=0)
+        day_after_tomorrow = today.shift(days=2)
+        print(day_after_tomorrow.date())
+
+        payload = {'apikey': apikey,
+                   'symbol': 'SPY',
+                   'contractType': 'PUT',
+                   'strikeCount': 10,
+                   'includeQuotes': 'TRUE',
+                   'strategy': 'SINGLE',
+                   'fromDate': today.format(),
+                   'toDate': day_after_tomorrow.format()}
+
+        self.get_options_chain(payload=payload)
+
     def test_order(self):
-        utility_instance.login()
-        utility_instance.get_account()
 
         payload = {enums.OrderPayload.session.value: enums.SessionOptions.NORMAL.value,
                    enums.OrderPayload.orderType.value: enums.OrderTypeOptions.LIMIT.value,
@@ -783,4 +775,6 @@ class UtilityClass():
 
 if __name__ == "__main__":
     utility_instance = UtilityClass()
-    utility_instance.test_order()
+    utility_instance.login()
+    utility_instance.get_account()
+    utility_instance.test_options_chain()
