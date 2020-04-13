@@ -26,7 +26,7 @@ def grub(symbol='GOOG', startdate=1581921000000):
                'period': 1,
                'frequencyType': 'minute',
                'frequency': 1,
-               'startDate ': epoch_time,
+               'startDate ': startdate,
                # 'endDate ': startdate,
                'needExtendedHoursData ': 'false'
                }
@@ -72,7 +72,7 @@ if __name__ == '__main__':
         plt.plot(data['datetime'], data[key])
     '''
 
-    lookback_days = 3
+    lookback_days = 1
     # caculate current date
     # today = datetime.datetime.today()
     # today = today.replace(hour=8, minute=0, second=0, microsecond=0)  # UCT time is 4 hours ahead of NYC. Military time

@@ -55,6 +55,7 @@ def moving_average(data, period=20):
 
     return moving_avg
 
+
 def moving_average_update(old_data, old_avg, new_data, period=20):
     '''
     update the moving average
@@ -64,7 +65,15 @@ def moving_average_update(old_data, old_avg, new_data, period=20):
     :return:
     '''
 
-    working_data = old_data[-period:]
+    if old_data.shape[0] < period:
+        padded_data = np.concatenate((np.ones(period) * old_data[0], old_data))
+        working_data = old_data[-period:]
+    else:
+
+        working_data = old_data[-period:]
+
+    working_data = np.concatentate((working_data, new_data))
+
     cumulative_data = np.cumsum(working_data)
     working_moving_avg = (cumulative_data[period:] - cumulative_data[:-period]) / period
 
@@ -111,6 +120,25 @@ def bollinger_bands(data, average, period=20):
     two_sigma = 2 * np.sqrt(np.convolve(pad_squares, np.ones(period), mode='valid') / period)
 
     return average - two_sigma, average + two_sigma
+
+
+def bollinger_bands_update(old_data, old_average, new_data, new_average, period=20):
+    if old_data.shape[0] < period and old_average.shape[0] < period:
+        old_data_padded = np.concatenate((np.ones(period - 1) * old_data[0], old_data))
+        working_old_data = old_data_padded[-(period - 1):]
+        old_average_padded = np.concatenate((np.ones(period - 1) * old_average[0], old_average))
+        working_old_average = old_average_padded[-(period - 1):]
+    else:
+        working_old_data = old_data[-(period - 1):]
+        working_old_average = old_average[-(period - 1):]
+
+    working_data = np.concatenate((working_old_data, new_data))
+    working_average = np.concatenate((working_old_data, new_average))
+
+    pad_squares = (working_data - working_average) ** 2
+    two_sigma = 2 * np.sqrt(np.convolve(pad_squares, np.ones(period), mode='valid') / period)
+
+    return working_average - two_sigma, working_average + two_sigma
 
 
 def multi_bollinger_bands(data, multi_average, periods):

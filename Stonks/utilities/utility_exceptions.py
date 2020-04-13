@@ -1,4 +1,8 @@
-Access_Success = 200
+from enum import Enum
+
+class AccessSuccess(Enum):
+    account_success = 200
+    order_success = 201
 
 
 class AccessError(Exception):
@@ -14,8 +18,7 @@ class AccessError(Exception):
         for key, value in self.TD_Error_Codes.items():
             if value == kw_arg_list['ErrorCode']:
                 print(key)
-            else:
-                print('no valid error code passed to exception')
+                break
 
 
 class OrderError(Exception):

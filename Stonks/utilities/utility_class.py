@@ -1,5 +1,6 @@
 import script_context
 
+import Stonks.global_enums as enums
 from Stonks.utilities import utility_exceptions
 from Stonks.utilities.config import apikey, username, password, secretQ
 import requests
@@ -8,25 +9,22 @@ import urllib
 from splinter import Browser
 from selenium import webdriver
 
-import matplotlib.pyplot as plt
-import time
 import importlib
 import h5py
 import os
 import time
 import sys
-import numpy as np
 import arrow
 
 importlib.reload(utility_exceptions)
+importlib.reload(enums)
 
 
-
-
-
-class login_class():
+class UtilityClass():
     '''
-    This class handles the interface with the TD Ameritrade
+    This class handles the interface with the TD Ameritrade API and keeps the status of the account and connection.
+
+    It handles requests to the API and has error checking to ensure the program does not hang on API errors.
 
     '''
 
@@ -57,7 +55,6 @@ class login_class():
         ################################################################################################################
         # account variables
         ################################################################################################################
-        self.options_chain_quotes = {}
 
         self.account_reply = None  # this variable holds the value for the most recent reply from the API.
 
@@ -72,7 +69,6 @@ class login_class():
     ####################################################################################################################
     ####################################################################################################################
     ####################################################################################################################
-
 
     def open_browser(self):
         '''
@@ -146,8 +142,6 @@ class login_class():
 
         if self.verbose: print(self.parse_url)
 
-
-
         '''
         time.sleep(1)
         if self.verbose: print('selecting secret question...')
@@ -198,7 +192,7 @@ class login_class():
 
         # POST data to get access token
         self.authenticate_reply = requests.post(url=self.token_endpoint, headers=headers, data=payload)
-        if self.authenticate_reply.status_code == utility_exceptions.Access_Success:
+        if self.authenticate_reply.status_code == utility_exceptions.AccessSuccess.order_success.value:
             # convert json reply to dictionary
             self.token_data = self.authenticate_reply.json()
             self.access_token = self.token_data['access_token']
@@ -215,13 +209,12 @@ class login_class():
         self.credential()
         self.authenticate()
 
-
     ####################################################################################################################
     ####################################################################################################################
     ####################################################################################################################
     ####################################################################################################################
 
-    # Begin order functions
+    # Begin account functions
 
     ####################################################################################################################
     ####################################################################################################################
@@ -246,7 +239,7 @@ class login_class():
 
         # POST data to get access token
         self.account_reply = requests.get(url=self.accounts_endpoint, headers=self.access_header)
-        if self.account_reply.status_code == utility_exceptions.Access_Success:
+        if self.account_reply.status_code == utility_exceptions.AccessSuccess.order_success.value:
             self.account_data = self.account_reply.json()
             if self.verbose: print(self.account_data)
         else:
@@ -279,7 +272,7 @@ class login_class():
 
         # POST data to get access token
         self.account_reply = requests.get(url=self.account_endpoint, headers=self.access_header)
-        if self.account_reply.status_code == utility_exceptions.Access_Success:
+        if self.account_reply.status_code == utility_exceptions.AccessSuccess.order_success.value:
             self.account_data_dict[str(account_id)] = self.account_reply.json()
             if self.verbose: print(self.account_data)
         else:
@@ -357,14 +350,16 @@ class login_class():
         # post the request
         self.account_reply = requests.post(url=self.saved_order_endpoint, json=payload,
                                            headers=self.saved_order_access_header)
-        if self.account_reply.status_code == utility_exceptions.Access_Success:
+        if self.account_reply.status_code == utility_exceptions.AccessSuccess.order_success.value:
             # read out the status of the request
             if self.verbose: print(self.account_reply.status_code)
         else:
-            raise utility_exceptions.AccessError(url=self.saved_order_endpoint, json=payload,
-                                                 headers=self.saved_order_access_header)
+            raise utility_exceptions.AccessError(url=self.saved_order_endpoint,
+                                                 json=payload,
+                                                 headers=self.saved_order_access_header,
+                                                 ErrorCode=self.account_reply.status_code)
 
-        #record whether the the order state has changed
+        # record whether the the order state has changed
         self.orders_state_has_changed = True
 
     def delete_saved_order(self, order_id):
@@ -391,13 +386,13 @@ class login_class():
 
         # post the request
         self.account_reply = requests.delete(url=self.save_order_endpoint, headers=self.access_header)
-        if self.account_reply.status_code == utility_exceptions.Access_Success:
+        if self.account_reply.status_code == utility_exceptions.AccessSuccess.order_success.value:
             # read out the status of the request
             if self.verbose: print(self.account_reply.status_code)
         else:
             raise utility_exceptions.AccessError(url=self.save_order_endpoint, headers=self.access_header)
 
-        #record whether the the order state has changed
+        # record whether the the order state has changed
         self.orders_state_has_changed = True
 
     def get_current_saved_orders(self):
@@ -421,7 +416,7 @@ class login_class():
             self.account_id)
 
         self.account_reply = requests.get(url=self.saved_order_endpoint, headers=self.access_header)
-        if self.account_reply.status_code == utility_exceptions.Access_Success:
+        if self.account_reply.status_code == utility_exceptions.AccessSuccess.order_success.value:
             self.order_dict = self.account_reply.json()
             if self.verbose: print(self.order_dict)
             return True
@@ -430,7 +425,7 @@ class login_class():
                                                  url=self.saved_order_endpoint,
                                                  headers=self.access_header)
 
-        #record whether the the order state has changed
+        # record whether the the order state has changed
         self.orders_state_has_changed = True
 
     def replace_saved_order(self, order_id, payload):
@@ -484,14 +479,14 @@ class login_class():
         # post the request
         self.account_reply = requests.put(url=self.saved_order_endpoint, json=payload,
                                           headers=self.saved_order_access_header)
-        if self.account_reply.status_code == utility_exceptions.Access_Success:
+        if self.account_reply.status_code == utility_exceptions.AccessSuccess.order_success.value:
             # read out the status of the request
             if self.verbose: print(self.account_reply.status_code)
         else:
             raise utility_exceptions.AccessError(url=self.saved_order_endpoint, json=payload,
                                                  headers=self.saved_order_access_header)
 
-        #record whether the the order state has changed
+        # record whether the the order state has changed
         self.orders_state_has_changed = True
 
     ####################################################################################################################
@@ -550,15 +545,15 @@ class login_class():
 
         # post the request
         self.account_reply = requests.post(url=self.order_endpoint, json=payload, headers=self.order_access_header)
-        if self.account_reply.status_code == utility_exceptions.Access_Success:
+        if self.account_reply.status_code == utility_exceptions.AccessSuccess.order_success.value:
             # read out the status of the request
             if self.verbose: print(self.account_reply.status_code)
         else:
             raise utility_exceptions.AccessError(ErrorCode=self.account_reply.status_code,
-                                                 url=self.saved_order_endpoint,
-                                                 headers=self.access_header)
+                                                 url=self.order_endpoint,
+                                                 headers=self.order_access_header)
 
-        #record whether the the order state has changed
+        # record whether the the order state has changed
         self.orders_state_has_changed = True
 
     def delete_order(self, order_id):
@@ -578,14 +573,14 @@ class login_class():
             self.account_id, order_id)
         # post the request
         self.account_reply = requests.delete(url=self.delete_order_endpoint, headers=self.access_header)
-        if self.account_reply.status_code == utility_exceptions.Access_Success:
+        if self.account_reply.status_code == utility_exceptions.AccessSuccess.order_success.value:
             if self.verbose: print('deleted order'.format(order_id))
         else:
             raise utility_exceptions.AccessError(ErrorCode=self.account_reply.status_code,
                                                  url=self.saved_order_endpoint,
                                                  headers=self.access_header)
 
-        #record whether the the order state has changed
+        # record whether the the order state has changed
         self.orders_state_has_changed = True
 
     def replace_order(self, order_id, payload):
@@ -632,7 +627,7 @@ class login_class():
 
         # post the request
         self.account_reply = requests.post(url=self.order_endpoint, json=payload, headers=self.order_access_header)
-        if self.account_reply.status_code == utility_exceptions.Access_Success:
+        if self.account_reply.status_code == utility_exceptions.AccessSuccess.order_success.value:
             # read out the status of the request
             if self.verbose: print(self.account_reply.status_code)
         else:
@@ -640,7 +635,7 @@ class login_class():
                                                  url=self.saved_order_endpoint,
                                                  headers=self.access_header)
 
-        #record whether the the order state has changed
+        # record whether the the order state has changed
         self.orders_state_has_changed = True
 
     ####################################################################################################################
@@ -648,12 +643,30 @@ class login_class():
     ####################################################################################################################
     ####################################################################################################################
 
-    # Begin options chain quote functions
+    # Begin quote functions
 
     ####################################################################################################################
     ####################################################################################################################
     ####################################################################################################################
     ####################################################################################################################
+
+    def get_price_history(self, symbol, payload):
+        self.price_history_endpoint = r'https://api.tdameritrade.com/v1/marketdata/{}/pricehistory'.format(symbol)
+
+        self.account_reply = requests.get(url=self.price_history_endpoint, params=payload)
+        if self.account_reply.status_code == utility_exceptions.AccessSuccess.order_success.value:
+            # read out the status of the request
+            if self.verbose: print(self.account_reply.status_code)
+
+            return self.account_reply.json()
+
+        else:
+            raise utility_exceptions.AccessError(ErrorCode=self.account_reply.status_code,
+                                                 url=self.price_history_endpoint,
+                                                 params=payload
+                                                 )
+
+        pass
 
     def get_options_chain(self, payload):
         try:
@@ -691,18 +704,18 @@ class login_class():
         '''
 
         # post the request
-        self.account_reply = requests.post(url=self.options_chain_endpoint, json=payload, headers=self.options_access_header)
-        if self.account_reply.status_code == utility_exceptions.Access_Success:
+        self.account_reply = requests.post(url=self.options_chain_endpoint, json=payload,
+                                           headers=self.options_access_header)
+        if self.account_reply.status_code == utility_exceptions.AccessSuccess.order_success.value:
             # read out the status of the request
             if self.verbose: print(self.account_reply.status_code)
 
-            self.options_chain_quotes.append(self.account_reply.json())
+            return self.account_reply.json()
 
         else:
             raise utility_exceptions.AccessError(ErrorCode=self.account_reply.status_code,
                                                  url=self.saved_order_endpoint,
                                                  headers=self.access_header)
-
 
     ####################################################################################################################
     ####################################################################################################################
@@ -719,13 +732,55 @@ class login_class():
     def test(self):
         self.get_account()
 
-        #self.open_browser()
-        #self.login()
-        #self.authenticate()
-        #self.access_accounts()
-        #self.access_single_account(account_id=self.account_id)
+        # self.open_browser()
+        # self.login()
+        # self.authenticate()
+        # self.access_accounts()
+        # self.access_single_account(account_id=self.account_id)
+
+    def test_price_history(self):
+        # self.login()
+
+        lookback_days = 1
+        today = arrow.now('America/New_York')
+        today = today.replace(hour=4, minute=0, second=0, microsecond=0)
+        yesterday = today.shift(days=-lookback_days)
+
+        payload = {enums.PriceHistoryPayload.apikey.value: apikey,
+                   enums.PriceHistoryPayload.periodType.value: enums.PeriodTypeOptions.day.value,
+                   enums.PriceHistoryPayload.period.value: 1,
+                   enums.PriceHistoryPayload.frequencyType.value: enums.FrequencyTypeOptions.minute.value,
+                   enums.PriceHistoryPayload.frequency.value: 1,
+                   enums.PriceHistoryPayload.startDate.value: yesterday.timestamp,
+                   # 'endDate ': startdate,
+                   enums.PriceHistoryPayload.needExtendedHoursData.value: 'false'
+                   }
+
+        history = self.get_price_history('SPY', payload=payload)
+
+    def test_order(self):
+        utility_instance.login()
+        utility_instance.get_account()
+
+        payload = {enums.OrderPayload.session.value: enums.SessionOptions.NORMAL.value,
+                   enums.OrderPayload.orderType.value: enums.OrderTypeOptions.LIMIT.value,
+                   enums.OrderPayload.price.value: 1.,
+                   enums.OrderPayload.duration.value: enums.DurationOptions.DAY.value,
+                   enums.OrderPayload.quantity.value: 1,
+                   enums.OrderPayload.orderLegCollection.value: [
+                       {enums.OrderLegCollectionDict.instruction.value: enums.InstructionOptions.BUY_TO_OPEN.value,
+                        enums.OrderLegCollectionDict.quantity.value: 1,
+                        enums.OrderLegCollectionDict.instrument.value: {
+                            enums.InstrumentType.symbol.value: 'SPY_041320P274',
+                            enums.InstrumentType.assetType.value: enums.AssetTypeOptions.OPTION.value
+                        }
+
+                        }],
+                   enums.OrderPayload.orderStrategyType.value: enums.OrderStrategyTypeOptions.SINGLE.value}
+
+        self.place_order(payload=payload)
 
 
 if __name__ == "__main__":
-    login_instance = login_class()
-    login_instance.test()
+    utility_instance = UtilityClass()
+    utility_instance.test_order()
