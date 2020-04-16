@@ -274,7 +274,13 @@ class UtilityClass():
             self.credential()
             self.authenticate()
         else:
-            self.refresh_authentication()
+            try:
+                self.refresh_authentication()
+            except utility_exceptions.AccessError:
+                if self.verbose: print('refresh token has expired..')
+                self.open_browser()
+                self.credential()
+                self.authenticate()
 
     ####################################################################################################################
     ####################################################################################################################
@@ -855,7 +861,22 @@ class UtilityClass():
                    'fromDate': today.format(),
                    'toDate': day_after_tomorrow.format()}
 
-        self.get_options_chain(payload=payload)
+        option_chain = self.get_options_chain(payload=payload)
+
+        def unpack(chain):
+            print()
+            if type(chain) == dict:
+                for key in chain.keys():
+                    print(key)
+                    if type(chain[key]) == dict:
+                        unpack(chain[key])
+                        print()
+                    if type(chain[key]) == list:
+                        if type(chain[key][0]) == dict:
+                            print(chain[key][0])
+                            print()
+
+
 
     def test_order(self):
 
