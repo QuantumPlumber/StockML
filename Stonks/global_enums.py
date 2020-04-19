@@ -67,6 +67,7 @@ class OrderPayload(Enum):
     orderLegCollection = 'orderLegCollection'
     orderStrategyType = 'orderStrategyType'
     orderId = 'orderId'
+    status = 'status'
 
 
 class SessionOptions(Enum):
@@ -132,7 +133,34 @@ class InstructionOptions(Enum):
     BUY_TO_OPEN = 'BUY_TO_OPEN'
     SELL_TO_CLOSE = 'SELL_TO_CLOSE'
 
+
 class OrderStrategyTypeOptions(Enum):
     SINGLE = 'SINGLE'
     OCO = 'OCO'
     TRIGGER = 'TRIGGER'
+
+class StatusOptions(Enum):
+    AWAITING_PARENT_ORDER = 'AWAITING_PARENT_ORDER'
+    AWAITING_CONDITION = 'AWAITING_CONDITION'
+    AWAITING_MANUAL_REVIEW = 'AWAITING_MANUAL_REVIEW'
+    ACCEPTED = 'ACCEPTED'
+    AWAITING_UR_OUT = 'AWAITING_UR_OUT'
+    PENDING_ACTIVATION = 'PENDING_ACTIVATION'
+    QUEUED = 'QUEUED'
+    WORKING = 'WORKING'
+    REJECTED = 'REJECTED'
+    PENDING_CANCEL = 'PENDING_CANCEL'
+    CANCELED = 'CANCELED'
+    PENDING_REPLACE = 'PENDING_REPLACE'
+    REPLACED = 'REPLACED'
+    FILLED = 'FILLED'
+    EXPIRED = 'EXPIRED'
+
+########################################################################################################################
+########################################################################################################################
+########################################################################################################################
+'''
+order class status
+'''
+
+

@@ -213,7 +213,7 @@ class strategy():
         '''
         pos: positions.Position
         for pos in self.positions:
-            if pos.needs_purchase():
+            if pos.needs_bought():
                 # enter strategy to buy here
 
                 # calculate limit value
@@ -243,15 +243,23 @@ class strategy():
                                                                                        size=1)}
 
                 if self.utility_class.place_order(payload=payload):
-                    pos.open_buy_order(payload=payload, time=arrow.now('America/New_York'))
+                    pos.update_orders(order_payload_list=[payload, ])
+
+    def update_positions(self):
+        # get account position dicts to feed in to positions
+
+        # request position oders and get quotes
+        pass
+
+    def implement_stop_loss(self):
+        # input stoploss positions on all positions with open orders.
+        pass
 
     def check_sell_condition(self):
         '''
         put buy condition function here
         :return:
         '''
-
-
 
     def sell(self):
         '''
@@ -267,7 +275,7 @@ class strategy():
                 limit_price = None
 
                 # calculate number of options contracts
-                number_of_options = pos.
+                number_of_options = None
 
                 # build purchase dictionary
                 payload = {enums.OrderPayload.session.value: enums.SessionOptions.NORMAL.value,
@@ -290,8 +298,7 @@ class strategy():
                                                                                        size=1)}
 
                 if self.utility_class.place_order(payload=payload):
-                    pos.open_sell_order(payload=payload, time=arrow.now('America/New_York'))
-
+                    pos.update_orders(order_payload_list=[payload, ])
 
     def order_status(self):
         '''
