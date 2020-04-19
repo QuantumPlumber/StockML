@@ -17,7 +17,6 @@ class DataKeys(Enum):
 ########################################################################################################################
 ########################################################################################################################
 class ComputeKeys(Enum):
-    time = 'time'
     data = 'data'
     sma = 'sma'
     derivative = 'derivative'
@@ -67,6 +66,7 @@ class OrderPayload(Enum):
     price = 'price'
     orderLegCollection = 'orderLegCollection'
     orderStrategyType = 'orderStrategyType'
+    orderId = 'orderId'
 
 
 class SessionOptions(Enum):

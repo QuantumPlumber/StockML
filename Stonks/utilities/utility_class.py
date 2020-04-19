@@ -8,6 +8,7 @@ import pandas as pd
 import urllib
 from splinter import Browser
 from selenium import webdriver
+import numpy as np
 
 import importlib
 import h5py
@@ -357,6 +358,8 @@ class UtilityClass():
         except utility_exceptions.AccountError:
             if self.account_authenticated:
                 self.login()
+                self.access_accounts()
+                self.access_single_account(self.account_id)
             else:
                 raise
 
@@ -612,6 +615,7 @@ class UtilityClass():
                         "assetType": "OPTION"
                     }
                 }
+                orderId: 1111111
             ]
         }
         '''
@@ -628,6 +632,8 @@ class UtilityClass():
 
         # record whether the the order state has changed
         self.orders_state_has_changed = True
+
+        return True
 
     def delete_order(self, order_id):
         try:
@@ -823,20 +829,22 @@ class UtilityClass():
 
         lookback_days = 1
         today = arrow.now('America/New_York')
-        today = today.replace(hour=4, minute=0, second=0, microsecond=0)
+        # today = today.replace(hour=4, minute=0, second=0, microsecond=0)
         yesterday = today.shift(days=-lookback_days)
 
         payload = {enums.PriceHistoryPayload.apikey.value: apikey,
-                   enums.PriceHistoryPayload.periodType.value: enums.PeriodTypeOptions.day.value,
-                   enums.PriceHistoryPayload.period.value: 1,
+                   # enums.PriceHistoryPayload.periodType.value: enums.PeriodTypeOptions.day.value,
+                   # enums.PriceHistoryPayload.period.value: 1,
                    enums.PriceHistoryPayload.frequencyType.value: enums.FrequencyTypeOptions.minute.value,
                    enums.PriceHistoryPayload.frequency.value: 1,
-                   enums.PriceHistoryPayload.startDate.value: yesterday.timestamp,
-                   # 'endDate ': startdate,
+                   enums.PriceHistoryPayload.startDate.value: yesterday.timestamp * 1e3,
+                   enums.PriceHistoryPayload.endDate.value: today.timestamp * 1e3,
                    enums.PriceHistoryPayload.needExtendedHoursData.value: 'false'
                    }
-
+        starttime = time.perf_counter()
         history = self.get_price_history('SPY', payload=payload)
+        totaltime = time.perf_counter() - starttime
+        print(totaltime)
 
     def test_options_chain(self):
         today = arrow.now('America/New_York')
@@ -876,8 +884,6 @@ class UtilityClass():
                             print(chain[key][0])
                             print()
 
-
-
     def test_order(self):
 
         payload = {enums.OrderPayload.session.value: enums.SessionOptions.NORMAL.value,
@@ -894,7 +900,8 @@ class UtilityClass():
                         }
 
                         }],
-                   enums.OrderPayload.orderStrategyType.value: enums.OrderStrategyTypeOptions.SINGLE.value}
+                   enums.OrderPayload.orderStrategyType.value: enums.OrderStrategyTypeOptions.SINGLE.value,
+                   enums.OrderPayload.orderId.value: np.random.random_integers(low=int(1e8), high=int(1e9), size=1)}
 
         self.place_order(payload=payload)
 
