@@ -5,7 +5,7 @@ from Stonks import global_enums as enums
 from Stonks.Orders import orders_class as orders
 
 
-class Position():
+class Position:
     def __init__(self, parameters: dict, underlying_quote: dict, quote_data: dict):
         # save arguments
         self.parameters = parameters
@@ -21,6 +21,7 @@ class Position():
         self.expiration = quote_data['expirationDate']
         self.strike_price = quote_data['strikePrice']
         self.symbol = quote_data['symbol']
+        self.underlying_symbol = underlying_quote['symbol']
 
         # define prices and initialize lists to hold price data
         self.stock_price_at_trigger = underlying_quote['ask']  # use the ask as the initial price of the option
@@ -38,7 +39,7 @@ class Position():
         self.closing_position = False
         self.position_closed = False
 
-        # trackign orders and order status:
+        # tracking orders and order status:
         self.open_order = False
         self.orders_consistent = True
         self.order_list = []
@@ -81,7 +82,7 @@ class Position():
         else:
             # if no orders exist then create new orders
             for order_payload in order_payload_list:
-                self.order_list.append(orders.Order(order_payload))
+                self.order_list.append(orders.Order(order_dict=order_payload))
 
     def track_open_order_time(self, time: arrow.Arrow):
         open_times = []

@@ -252,7 +252,10 @@ class UtilityClass():
             self.account_authenticated = True
 
         else:
-            raise utility_exceptions.AccessError(url=self.token_endpoint, headers=headers, data=payload)
+            raise utility_exceptions.AccessError(url=self.token_endpoint,
+                                                 headers=headers,
+                                                 data=payload,
+                                                 ErrorCode=self.authenticate_reply.status_code)
 
     def check_for_refresh_token(self):
         self.utility_path = os.getcwd()
@@ -274,14 +277,17 @@ class UtilityClass():
             self.open_browser()
             self.credential()
             self.authenticate()
+            self.access_accounts()
         else:
             try:
                 self.refresh_authentication()
+                self.access_accounts()
             except utility_exceptions.AccessError:
                 if self.verbose: print('refresh token has expired..')
                 self.open_browser()
                 self.credential()
                 self.authenticate()
+                self.access_accounts()
 
     ####################################################################################################################
     ####################################################################################################################
@@ -363,22 +369,11 @@ class UtilityClass():
             else:
                 raise
 
-    ####################################################################################################################
-    ####################################################################################################################
-    ####################################################################################################################
-    ####################################################################################################################
-
-    # Begin saved order functions
-
-    ####################################################################################################################
-    ####################################################################################################################
-    ####################################################################################################################
-    ####################################################################################################################
-
-    def place_saved_order(self, payload):
+    def get_account_positions(self):
         '''
-        Create a saved order
+        Access the single account to get data
 
+        :param account_id:
         :return:
         '''
 
@@ -394,176 +389,20 @@ class UtilityClass():
             if self.verbose: print('account id not defined')
             raise utility_exceptions.AccountError(id_error=True)
 
-        self.saved_order_endpoint = r'https://api.tdameritrade.com/v1/accounts/{}/savedorders'.format(
-            self.account_id)
+        # define the accounts endpoint
+        self.account_endpoint = r'https://api.tdameritrade.com/v1/accounts/{}'.format(self.account_id)
 
-        # add a line to describe the type of request to the website
-        self.saved_order_access_header = self.access_header.copy()
-        self.saved_order_access_header['Content-Type'] = 'application/json'
+        # define payload
+        payload = {'fields': 'positions'}
 
-        # define the payload
-        '''
-        payload = {
-            "complexOrderStrategyType": "NONE",
-            "orderType": "LIMIT",
-            "session": "NORMAL",
-            "price": "6.45",
-            "duration": "DAY",
-            "orderStrategyType": "SINGLE",
-            "orderLegCollection": [
-                {
-                    "instruction": "BUY_TO_OPEN",
-                    "quantity": 10,
-                    "instrument": {
-                        "symbol": "XYZ_032015C49",
-                        "assetType": "OPTION"
-                    }
-                }
-            ]
-        }
-        '''
-
-        # post the request
-        self.account_reply = requests.post(url=self.saved_order_endpoint, json=payload,
-                                           headers=self.saved_order_access_header)
-        if self.account_reply.status_code == utility_exceptions.AccessSuccess.order_success.value:
-            # read out the status of the request
-            if self.verbose: print(self.account_reply.status_code)
+        # GET account data
+        self.account_reply = requests.get(url=self.account_endpoint, params=payload, headers=self.access_header)
+        if self.account_reply.status_code == utility_exceptions.AccessSuccess.account_success.value:
+            if self.verbose: print(self.account_data)
+            return self.account_reply.json()[self.account_id]['securitiesAccount']['positions']
         else:
-            raise utility_exceptions.AccessError(url=self.saved_order_endpoint,
-                                                 json=payload,
-                                                 headers=self.saved_order_access_header,
-                                                 ErrorCode=self.account_reply.status_code)
+            raise utility_exceptions.AccessError(url=self.account_endpoint, headers=self.access_header)
 
-        # record whether the the order state has changed
-        self.orders_state_has_changed = True
-
-    def delete_saved_order(self, order_id):
-        '''
-        Delete a saved order
-
-        :param order_id:
-        :return:
-        '''
-        try:
-            self.access_header
-        except AttributeError:
-            if self.verbose: print('access header not defined')
-            raise utility_exceptions.AccountError(header_error=True)
-
-        try:
-            self.account_id
-        except AttributeError:
-            if self.verbose: print('account id not defined')
-            raise utility_exceptions.AccountError(id_error=True)
-
-        self.delete_order_endpoint = r'https://api.tdameritrade.com/v1/accounts/{}/savedorders/{}'.format(
-            self.account_id, order_id)
-
-        # post the request
-        self.account_reply = requests.delete(url=self.save_order_endpoint, headers=self.access_header)
-        if self.account_reply.status_code == utility_exceptions.AccessSuccess.order_success.value:
-            # read out the status of the request
-            if self.verbose: print(self.account_reply.status_code)
-        else:
-            raise utility_exceptions.AccessError(url=self.save_order_endpoint, headers=self.access_header)
-
-        # record whether the the order state has changed
-        self.orders_state_has_changed = True
-
-    def get_current_saved_orders(self):
-        '''
-        Get the current saved orders and store them in a dictionary.
-        :return:
-        '''
-        try:
-            self.access_header
-        except AttributeError:
-            if self.verbose: print('access header not defined')
-            raise utility_exceptions.AccountError(header_error=True)
-
-        try:
-            self.account_id
-        except AttributeError:
-            if self.verbose: print('account id not defined')
-            raise utility_exceptions.AccountError(id_error=True)
-
-        self.saved_order_endpoint = r'https://api.tdameritrade.com/v1/accounts/{}/savedorders'.format(
-            self.account_id)
-
-        self.account_reply = requests.get(url=self.saved_order_endpoint, headers=self.access_header)
-        if self.account_reply.status_code == utility_exceptions.AccessSuccess.order_success.value:
-            self.order_dict = self.account_reply.json()
-            if self.verbose: print(self.order_dict)
-            return True
-        else:
-            raise utility_exceptions.AccessError(ErrorCode=self.account_reply.status_code,
-                                                 url=self.saved_order_endpoint,
-                                                 headers=self.access_header)
-
-        # record whether the the order state has changed
-        self.orders_state_has_changed = True
-
-    def replace_saved_order(self, order_id, payload):
-        '''
-        Replace a saved order
-
-        :return:
-        '''
-
-        try:
-            self.access_header
-        except AttributeError:
-            if self.verbose: print('access header not defined')
-            raise utility_exceptions.AccountError(header_error=True)
-
-        try:
-            self.account_id
-        except AttributeError:
-            if self.verbose: print('account id not defined')
-            raise utility_exceptions.AccountError(id_error=True)
-
-        self.saved_order_endpoint = r'https://api.tdameritrade.com/v1/accounts/{}/savedorders/{}'.format(
-            self.account_id, order_id)
-
-        # add a line to describe the type of request to the website
-        self.saved_order_access_header = self.access_header.copy()
-        self.saved_order_access_header['Content-Type'] = 'application/json'
-
-        # define the payload
-        '''
-        payload = {
-            "complexOrderStrategyType": "NONE",
-            "orderType": "LIMIT",
-            "session": "NORMAL",
-            "price": "6.45",
-            "duration": "DAY",
-            "orderStrategyType": "SINGLE",
-            "orderLegCollection": [
-                {
-                    "instruction": "BUY_TO_OPEN",
-                    "quantity": 10,
-                    "instrument": {
-                        "symbol": "XYZ_032015C49",
-                        "assetType": "OPTION"
-                    }
-                }
-            ]
-        }
-        '''
-
-        # post the request
-        self.account_reply = requests.put(url=self.saved_order_endpoint, json=payload,
-                                          headers=self.saved_order_access_header)
-        if self.account_reply.status_code == utility_exceptions.AccessSuccess.order_success.value:
-            # read out the status of the request
-            if self.verbose: print(self.account_reply.status_code)
-        else:
-            raise utility_exceptions.AccessError(url=self.saved_order_endpoint, json=payload,
-                                                 headers=self.saved_order_access_header)
-
-        # record whether the the order state has changed
-        self.orders_state_has_changed = True
 
     ####################################################################################################################
     ####################################################################################################################
@@ -648,15 +487,15 @@ class UtilityClass():
             if self.verbose: print('account id not defined')
             raise utility_exceptions.AccountError(id_error=True)
 
-        self.delete_order_endpoint = r'https://api.tdameritrade.com/v1/accounts/{}/orders/{}'.format(
+        self.order_endpoint = r'https://api.tdameritrade.com/v1/accounts/{}/orders/{}'.format(
             self.account_id, order_id)
         # post the request
-        self.account_reply = requests.delete(url=self.delete_order_endpoint, headers=self.access_header)
+        self.account_reply = requests.delete(url=self.order_endpoint, headers=self.access_header)
         if self.account_reply.status_code == utility_exceptions.AccessSuccess.order_success.value:
             if self.verbose: print('deleted order'.format(order_id))
         else:
             raise utility_exceptions.AccessError(ErrorCode=self.account_reply.status_code,
-                                                 url=self.saved_order_endpoint,
+                                                 url=self.order_endpoint,
                                                  headers=self.access_header)
 
         # record whether the the order state has changed
@@ -678,7 +517,7 @@ class UtilityClass():
         self.order_endpoint = r'https://api.tdameritrade.com/v1/accounts/{}/orders/{}'.format(
             self.account_id, order_id)
 
-        # add a line to describe the type of request to the website
+        # add a line to describe the post type of request to the website
         self.order_access_header = self.access_header.copy()
         self.order_access_header['Content-Type'] = 'application/json'
 
@@ -711,11 +550,63 @@ class UtilityClass():
             if self.verbose: print(self.account_reply.status_code)
         else:
             raise utility_exceptions.AccessError(ErrorCode=self.account_reply.status_code,
-                                                 url=self.saved_order_endpoint,
+                                                 url=self.order_endpoint,
                                                  headers=self.order_access_header)
 
         # record whether the the order state has changed
         self.orders_state_has_changed = True
+
+    def get_orders(self, payload):
+        try:
+            self.access_header
+        except AttributeError:
+            if self.verbose: print('access header not defined')
+            raise utility_exceptions.AccountError(header_error=True)
+
+        try:
+            self.account_id
+        except AttributeError:
+            if self.verbose: print('account id not defined')
+            raise utility_exceptions.AccountError(id_error=True)
+
+        self.order_endpoint = r'https://api.tdameritrade.com/v1/accounts/{}/orders'.format(
+            self.account_id)
+
+        self.account_reply = requests.get(url=self.order_endpoint, params=payload, headers=self.access_header)
+        if self.account_reply.status_code == utility_exceptions.AccessSuccess.account_success.value:
+            # read out the status of the request
+            if self.verbose: print(self.account_reply.status_code)
+            return self.account_reply.json()
+        else:
+            raise utility_exceptions.AccessError(ErrorCode=self.account_reply.status_code,
+                                                 url=self.order_endpoint,
+                                                 headers=self.access_header)
+
+    def get_order(self, order_id):
+        try:
+            self.access_header
+        except AttributeError:
+            if self.verbose: print('access header not defined')
+            raise utility_exceptions.AccountError(header_error=True)
+
+        try:
+            self.account_id
+        except AttributeError:
+            if self.verbose: print('account id not defined')
+            raise utility_exceptions.AccountError(id_error=True)
+
+        self.order_endpoint = r'https://api.tdameritrade.com/v1/accounts/{}/orders/{}'.format(
+            self.account_id, order_id)
+
+        self.account_reply = requests.get(url=self.order_endpoint, headers=self.access_header)
+        if self.account_reply.status_code == utility_exceptions.AccessSuccess.account_success.value:
+            # read out the status of the request
+            if self.verbose: print(self.account_reply.status_code)
+            return self.account_reply.json()
+        else:
+            raise utility_exceptions.AccessError(ErrorCode=self.account_reply.status_code,
+                                                 url=self.order_endpoint,
+                                                 headers=self.order_access_header)
 
     ####################################################################################################################
     ####################################################################################################################

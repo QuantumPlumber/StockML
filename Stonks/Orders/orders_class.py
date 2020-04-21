@@ -4,7 +4,7 @@ import arrow
 from Stonks import global_enums as enums
 
 
-class Order():
+class Order:
     def __init__(self, order_dict):
 
         self.is_open = True

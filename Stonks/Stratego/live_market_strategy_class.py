@@ -17,6 +17,8 @@ from Stonks.Positions import live_market_position_class as positions
 
 importlib.reload(positions)
 
+from Stonks.Orders import orders_class
+
 from Stonks.utilities.utility_class import UtilityClass
 
 importlib.reload(UtilityClass)
@@ -132,39 +134,6 @@ class strategy():
 
         self.sell()
 
-    def check_buy_condition(self):
-        '''
-        put buy condition function here
-        :return:
-        '''
-
-        open_position = False
-        for position in self.positions:
-            if position.is_open:
-                open_position = True
-
-        candle = self.analytics.data['candle']
-        sma = self.analytics.data['sma'][0]
-        sma_short = self.analytics.data['sma'][1]
-        bollinger_up, bollinger_down = self.analytics.data['Bollinger'][0]
-
-        threshold = 2 * (sma_short[-1] - sma[-1]) / np.absolute(bollinger_up[-1] - bollinger_down[-1])
-
-        if threshold > self.parameters['Bollinger_top']:
-            self.buy_armed = True
-
-        if self.buy_armed and threshold <= self.parameters['Bollinger_top'] and not open_position:
-            strike_delta = 2 * (candle[-1] - bollinger_down[-1])
-            if strike_delta >= 6:
-                strike_delta = 6
-
-            self.strike_price = candle[-1] - strike_delta
-            self.positions.append(position.Position())
-            self.buy()
-
-        if threshold < self.parameters['Bollinger_top']:
-            self.buy_armed = False
-
     def build_position(self):
         '''
         utiltiy functions for building a position
@@ -196,9 +165,11 @@ class strategy():
 
         price_difference = np.abs(np.array(strikes_prices) - self.strike_price)
         min_price_difference = price_difference.min()
-        best_stirke_location = np.where(price_difference == min_price_difference)[0]
+        best_strike_location = np.where(price_difference == min_price_difference)[0]
 
-        chosen_option_quote = self.options_chain_dict[list(self.options_chain_dict.keys())[best_stirke_location]]
+        chosen_option_quote = self.options_chain_dict[
+            list(self.options_chain_dict.keys())[best_strike_location]
+        ]
         underlying_security_quote = self.options_chain_dict['underlying']
 
         self.positions.append(positions.Position(parameters=self.parameters,
@@ -247,19 +218,40 @@ class strategy():
 
     def update_positions(self):
         # get account position dicts to feed in to positions
+        positions_dict = self.utility_class.get_account_positions()
 
-        # request position oders and get quotes
-        pass
+        #get orders dict for this account and prepare it
+        #get orders for today only.
+        payload = {'maxResults': 1000,
+                   'fromEnteredTime': arrow.now('America/New_York').format('YYYY-MM-DD'),
+                   'toEnteredTime': arrow.now('America/New_York').format('YYYY-MM-DD')}
+        account_orders_list = self.utility_class.get_orders(payload=payload)
+
+        #iterate through positions
+        pos: positions.Position
+        for pos in self.positions:
+            for account_position in positions_dict['positions']:
+                # only work on open positions
+                if pos.symbol == account_position['instrument']['symbol']:
+                    option_quote = self.utility_class.get_quote(symbol=pos.symbol)
+                    underlying_quote = self.utility_class.get_quote(symbol=pos.underlying_symbol)
+                    pos.update_price_and_value(underlying_quote=underlying_quote,
+                                               quote_data=option_quote,
+                                               position_data=account_position)
+
+            # update orders for all positions
+            #first collect all orders related to this position
+            order_list = []
+            for order in account_orders_list:
+                if order[enums.OrderLegCollectionDict.instrument.value()]['symbol'] == pos.symbol:
+                    order_list.append(order)
+            pos.update_orders(order_payload_list=order_list)
+
 
     def implement_stop_loss(self):
         # input stoploss positions on all positions with open orders.
-        pass
 
-    def check_sell_condition(self):
-        '''
-        put buy condition function here
-        :return:
-        '''
+        pass
 
     def sell(self):
         '''
@@ -311,6 +303,45 @@ class strategy():
                 # must write function in utility class to get order history. Close orders on options that have filled.
                 # Raise flags on orders that need re-assessed.
                 pass
+
+    def check_buy_condition(self):
+        '''
+        put buy condition function here
+        :return:
+        '''
+
+        open_position = False
+        for position in self.positions:
+            if position.is_open:
+                open_position = True
+
+        candle = self.analytics.data['candle']
+        sma = self.analytics.data['sma'][0]
+        sma_short = self.analytics.data['sma'][1]
+        bollinger_up, bollinger_down = self.analytics.data['Bollinger'][0]
+
+        threshold = 2 * (sma_short[-1] - sma[-1]) / np.absolute(bollinger_up[-1] - bollinger_down[-1])
+
+        if threshold > self.parameters['Bollinger_top']:
+            self.buy_armed = True
+
+        if self.buy_armed and threshold <= self.parameters['Bollinger_top'] and not open_position:
+            strike_delta = 2 * (candle[-1] - bollinger_down[-1])
+            if strike_delta >= 6:
+                strike_delta = 6
+
+            self.strike_price = candle[-1] - strike_delta
+            self.positions.append(position.Position())
+            self.buy()
+
+        if threshold < self.parameters['Bollinger_top']:
+            self.buy_armed = False
+
+    def check_sell_condition(self):
+        '''
+        put buy condition function here
+        :return:
+        '''
 
     def implement_strategy(self, **kwargs):
         '''
