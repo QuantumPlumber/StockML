@@ -7,10 +7,11 @@ import timeit
 
 
 class analysis():
-    def __init__(self):
+    def __init__(self, compute_dict):
         self.compute = {}
         self.data = {}
-
+        self.compute_dict = compute_dict
+        
         self.Analytics_up_to_date = False
 
     ####################################################################################################################
@@ -35,44 +36,43 @@ class analysis():
 
         return True
 
-    def compute_analytics(self, compute_dict):
+    def compute_analytics(self, data):
 
-        if not self.validate_compute_dict(compute_dict):
+        if not self.validate_compute_dict(self.compute_dict):
             return False
 
-        self.num_datapoints = int(compute_dict['data'].shape[0])
-        self.compute['time'] = compute_dict['datetime']
+        self.num_datapoints = int(data.shape[0])
+        self.data = data
+        self.compute['time'] = data['datetime']
 
-        self.compute['candle'] = Analytics.candle(open=compute_dict['open'],
-                                                  high=compute_dict['high'],
-                                                  low=compute_dict['low'])
+        self.compute['candle'] = Analytics.candle(open=data['open'],
+                                                  high=data['high'],
+                                                  low=data['low'])
 
-        self.data['data'] = compute_dict['data']
+        self.compute['tradeable'] = Analytics.market_hours(data['time'])
 
-        self.compute['tradeable'] = Analytics.market_hours(compute_dict['time'])
-
-        for key, val in compute_dict.items():
+        for key, val in data.items():
             if key == 'sma':
-                if isinstance(compute_dict[key], list):
+                if isinstance(data[key], list):
                     self.compute[key] = []
-                    for period in compute_dict[key]:
+                    for period in data[key]:
                         self.compute[key].append(Analytics.moving_average(data=self.compute['candle'], period=period))
                 else:
                     continue
 
             if key == 'derivative':
-                if isinstance(compute_dict[key], list):
+                if isinstance(data[key], list):
                     self.compute[key] = []
-                    for sma_period, deriv_period in compute_dict[key]:
+                    for sma_period, deriv_period in data[key]:
                         local_sma = Analytics.moving_average(data=self.compute['candle'], period=sma_period)
                         self.compute[key].append(Analytics.derivative(data=local_sma, period=deriv_period))
                 else:
                     continue
 
             if key == 'Bollinger':
-                if isinstance(compute_dict[key], list):
+                if isinstance(data[key], list):
                     self.compute[key] = []
-                    for anchor_period, oscillator_period, bollinger_period in compute_dict[key]:
+                    for anchor_period, oscillator_period, bollinger_period in data[key]:
                         local_anchor = Analytics.moving_average(data=self.compute['candle'], period=anchor_period)
                         local_oscillator = Analytics.moving_average(data=self.compute['candle'],
                                                                     period=oscillator_period)

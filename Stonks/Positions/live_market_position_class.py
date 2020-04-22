@@ -46,6 +46,9 @@ class Position:
 
         # track position data from accounts api
         self.position_data = []
+        self.quantity = None
+        self.average_price = None
+        self.currentDayProfitLossPercentage = None
 
     def needs_bought(self):
         if self.opening_position and not self.position_open \
@@ -67,6 +70,9 @@ class Position:
         self.price_history.append(quote_data['lastPrice'])
         self.position_data.append(position_data)
         self.value_history.append(position_data['marketValue'])
+        self.quantity = position_data['shortQuantity']
+        self.average_price = position_data['averagePrice']
+        self.currentDayProfitLossPercentage = position_data['currentDayProfitLossPercentage']
 
     def update_orders(self, order_payload_list: list):
         if len(self.order_list) > 0:
@@ -118,7 +124,7 @@ class Position:
     def open_position(self, option_price):
         self._check_open_order()
         self._check_order_consistency()
-        if self.open_position() and self.orders_consistent:
+        if self.open_order and self.orders_consistent and self.quantity!= 0:
             self.building_position = False
             self.position_open = True
             self.value_history.append(option_price)
@@ -126,7 +132,7 @@ class Position:
     def close_position(self, option_price):
         self._check_open_order()
         self._check_order_consistency()
-        if self.open_position() and self.orders_consistent:
+        if self.open_order and self.orders_consistent and self.quantity == 0:
             self.building_position = False
             self.position_open = False
             self.closing_position = False

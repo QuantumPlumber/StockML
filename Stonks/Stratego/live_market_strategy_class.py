@@ -32,10 +32,11 @@ class strategy():
         self.symbol = kwargs['symbol']
 
         # utility class to handle API functions
-        self.utility_class = UtilityClass(verbos=True)
+        self.utility_class = UtilityClass(verbose=True)
 
         # analysis class to handle data analysis
-        self.analytics = Analytics_class.analysis(compute_dict=self.analysis_parameters)
+        self.compute_dict = kwargs['compute_dict']
+        self.analytics = Analytics_class.analysis(compute_dict=self.compute_dict)
 
         # timing and dates
         self.today = arrow.now('America/New_York')
@@ -49,6 +50,7 @@ class strategy():
         # positions list
         self.positions = []
 
+        # strategy parameters
         self.parameters = kwargs['parameters']
 
     def trading_day_minute(self):
@@ -102,8 +104,8 @@ class strategy():
                    enums.PriceHistoryPayload.endDate.value: today.timestamp * 1e3,
                    enums.PriceHistoryPayload.needExtendedHoursData.value: 'true'
                    }
-        price_history = self.pointer_to_utility_class.get_price_history(symbol=self.symbol, payload=payload)
-        self.analytics.compute_analytics(compute_dict=self.analysis_parameters)
+        price_history = self.utility_class.get_price_history(symbol=self.symbol, payload=payload)
+        self.analytics.compute_analytics(data=price_history)
 
     def change_metaparameters(self, **kwargs):
         '''
@@ -129,8 +131,8 @@ class strategy():
         :return:
         '''
 
-        for position in self.positions:
-            position.sell_condition = True
+        pos: positions.Position
+        for pos in self.positions:
 
         self.sell()
 
@@ -247,6 +249,8 @@ class strategy():
                     order_list.append(order)
             pos.update_orders(order_payload_list=order_list)
 
+    def refresh_orders(self):
+
 
     def implement_stop_loss(self):
         # input stoploss positions on all positions with open orders.
@@ -342,6 +346,17 @@ class strategy():
         put buy condition function here
         :return:
         '''
+        pos: positions.Position
+        for pos in self.positions:
+            if pos.position_purchased:
+                #check stop profit
+                if pos.value_history[-1] >= self.parameters['stop_profit'] * pos.value_history[0]:
+                    pos.closing_position = True
+
+                #check stop loss
+                if pos.value_history[-1] <= self.parameters['stop_loss']*np.max(pos.value_history):
+                    pos.closing_position = True
+
 
     def implement_strategy(self, **kwargs):
         '''
@@ -371,65 +386,16 @@ class strategy():
 
                 if self.check_stop_trading():
                     self.close_all_positions()
+                    self.sell()
                     break
                 else:
+                    #build new position
                     self.check_buy_condition()
+                    self.build_position()
+                    self.buy()
+
+                    # update existing conditions, update orders
+                    self.update_positions()
+                    self.refresh_orders()
                     self.check_sell_condition()
-
-    def setup_plot(self):
-        fig, axs = plt.subplots(nrows=self.num_files_in_directory, ncols=2, sharex=False,
-                                figsize=(30, int(4 * self.num_files_in_directory)))
-
-    def plot_day(self, ax):
-        ax_twin = ax[0].twinx()
-        ax_twin.plot(self.self.time[self.tradeable], self.Bollinger_oscillator[self.tradeable])
-        ax_twin.plot(self.time[self.tradeable],
-                     np.ones_like(self.time[self.tradeable]) * self.hyper_parameters['Bollinger_top'], color='k')
-        ax_twin.plot(self.time[self.tradeable],
-                     np.ones_like(self.time[self.tradeable]) * self.hyper_parameters['Bollinger_bot'], color='k')
-
-        ax[0].plot(self.time[self.tradeable], self.self.candle[self.tradeable], '.', label=str(put_percent_avg))
-        ax[0].plot(self.time[self.tradeable], self.sma[self.tradeable])
-        ax[0].plot(self.time[self.tradeable], self.self.sma_low_bollinger[self.tradeable])
-        ax[0].plot(self.time[self.tradeable], self.sma_high_bollinger[self.tradeable])
-        ax[0].plot(self.time[self.tradeable], self.candle_low_bollinger[self.tradeable])
-        ax[0].plot(self.time[self.tradeable], self.candle_high_bollinger[self.tradeable])
-
-        profit_put_buy_locs = self.put_buy_locs[self.put_profits >= 0]
-        put_cut = profit_put_buy_locs
-        ax[0].plot(self.time[put_cut], self.candle[put_cut], '>', color='k')
-
-        profit_put_sell_locs = self.put_sell_locs[self.put_profits >= 0]
-        put_cut = profit_put_sell_locs
-        ax[0].plot(self.time[put_cut], self.candle[put_cut], '<', color='k')
-
-        ax[0].legend()
-
-        #################################################################################
-        # plt.figure(figsize=(20, 10))
-        # plt.suptitle('loss trades')
-        # ax[1].plot(self.time, data_volume, '.')
-
-        ax_twin = ax[1].twinx()
-        ax_twin.plot(self.time[self.tradeable], self.Bollinger_oscillator[self.tradeable])
-        ax_twin.plot(self.time[self.tradeable], np.ones_like(self.time[self.tradeable]) * parameters['Bollinger_top'],
-                     color='k')
-        ax_twin.plot(self.time[self.tradeable], np.ones_like(self.time[self.tradeable]) * parameters['Bollinger_bot'],
-                     color='k')
-
-        ax[1].plot(self.time[self.tradeable], self.candle[self.tradeable], '.', label=str(put_percent_avg))
-        ax[1].plot(self.time[self.tradeable], self.sma[self.tradeable])
-        ax[1].plot(self.time[self.tradeable], self.sma_low_bollinger[self.tradeable])
-        ax[1].plot(self.time[self.tradeable], self.sma_high_bollinger[self.tradeable])
-        ax[1].plot(self.time[self.tradeable], self.candle_low_bollinger[self.tradeable])
-        ax[1].plot(self.time[self.tradeable], self.candle_high_bollinger[self.tradeable])
-
-        loss_put_buy_locs = self.put_buy_locs[self.put_profits < 0]
-        put_cut = loss_put_buy_locs
-        ax[1].plot(self.time[put_cut], self.candle[put_cut], '>', color='k')
-
-        loss_put_sell_locs = self.put_sell_locs[self.put_profits < 0]
-        put_cut = loss_put_sell_locs
-        ax[1].plot(self.time[put_cut], self.candle[put_cut], '<', color='k')
-
-        ax[1].legend()
+                    self.sell()
