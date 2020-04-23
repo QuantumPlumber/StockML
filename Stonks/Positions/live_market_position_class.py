@@ -32,16 +32,15 @@ class Position:
         self.price_history = []
         self.value_history = []
 
-        # toggle variables for the buying and selling.
-        self.opening_position = True
-        self.position_open = False
-
-        self.closing_position = False
-        self.position_closed = False
+        # enumerated states of the option for buying, adding, reducing and selling position.
+        self.status = enums.StonksPositionState.needs_buy_order
+        self.position_active = True
 
         # tracking orders and order status:
         self.open_order = False
-        self.orders_consistent = True
+        self.buy_order_exists = None
+        self.sell_order_exists = None
+        self.orders_consistent = None
         self.order_list = []
 
         # track position data from accounts api
@@ -49,20 +48,6 @@ class Position:
         self.quantity = None
         self.average_price = None
         self.currentDayProfitLossPercentage = None
-
-    def needs_bought(self):
-        if self.opening_position and not self.position_open \
-                and not self.closing_position and not self.position_closed:
-            return True
-        else:
-            return False
-
-    def needs_sold(self):
-        if self.closing_position and self.position_open \
-                and not self.opening_position and not self.position_closed:
-            return True
-        else:
-            return False
 
     def update_price_and_value(self, underlying_quote: dict, quote_data: dict, position_data: dict):
         self.underlying_quote.append(underlying_quote)
@@ -84,11 +69,14 @@ class Position:
                         order.update(order_dict=order_payload)
                     else:
                         # create the order
-                        self.order_list.append(orders.Order(order_payload))
+                        self.order_list.append(orders.Order(order_dict=order_payload))
         else:
             # if no orders exist then create new orders
             for order_payload in order_payload_list:
                 self.order_list.append(orders.Order(order_dict=order_payload))
+
+        self._check_open_order()
+        self._check_order_consistency()
 
     def track_open_order_time(self, time: arrow.Arrow):
         open_times = []
@@ -106,55 +94,32 @@ class Position:
                 self.open_order = True
 
     def _check_order_consistency(self):
-        buy_order_exists = False
-        sell_order_exists = False
+        self.buy_order_exists = False
+        self.sell_order_exists = False
         order: orders.Order
         for order in self.order_list:
             if order.is_open:
                 if order.order_instruction == enums.InstructionOptions.BUY_TO_OPEN.value():
-                    buy_order_exists = True
+                    self.buy_order_exists = True
                 if order.order_instruction == enums.InstructionOptions.SELL_TO_CLOSE.value():
-                    sell_order_exists = True
+                    self.sell_order_exists = True
 
-        if buy_order_exists and sell_order_exists:
+        if self.buy_order_exists and self.sell_order_exists:
             self.orders_consistent = False
         else:
             self.orders_consistent = True
 
-    def open_position(self, option_price):
-        self._check_open_order()
-        self._check_order_consistency()
-        if self.open_order and self.orders_consistent and self.quantity!= 0:
-            self.building_position = False
-            self.position_open = True
-            self.value_history.append(option_price)
 
-    def close_position(self, option_price):
+    def de_activate_position(self, option_price):
+        '''
+        Function for setting the position in the closed state
+        :param option_price:
+        :return:
+        '''
         self._check_open_order()
         self._check_order_consistency()
         if self.open_order and self.orders_consistent and self.quantity == 0:
-            self.building_position = False
-            self.position_open = False
-            self.closing_position = False
-            self.position_closed = True
-            self.value_history.append(option_price)
-
-    def check_stop_loss(self):
-        if self.position_purchased:
-            if self.value_history[-1] <= self.stop_loss * self.value_history[0]:
-                self.position_closed = True
-                return True
-        else:
-            return False
-
-    def check_stop_profit(self):
-        if self.position_purchased:
-            if self.value_history[-1] <= self.stop_profit * np.max(np.array(self.value_history)):
-                self.price_at_close_trigger = self.value_history[-1]
-                self.position_closed = True
-                return True
-        else:
-            return False
+            self.position_active = False
 
 
 if __name__ == "__main__":

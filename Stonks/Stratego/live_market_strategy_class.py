@@ -79,12 +79,6 @@ class strategy():
         account = self.utility_class.access_accounts(self.utility_class.account_id)
         self.current_account_values = self.utility_class.account_data[0]['securitiesAccount']['currentBalances']
 
-    def create_option_name(self, ticker: str, strike: int, option_type: str):
-        self.option_date_string = self.options_end_date.format(fmt='MMDDYY')
-        quote_string = ticker + '_' + self.options_end_date.format(fmt='MMDDYY') + option_type + str(strike)
-        self.quote_string = quote_string
-        return quote_string
-
     def update_analytics(self):
         '''
         request new data and call the analytics class
@@ -119,13 +113,13 @@ class strategy():
         Determine if trading should continue
         :return:
         '''
-        percent_lost = 1. - self.current_account_values['liquidationValue'] / self.initial_account_values[
+        self.percent_lost = 1. - self.current_account_values['liquidationValue'] / self.initial_account_values[
             'liquidationValue']
 
-        if percent_lost >= .2:
+        if self.percent_lost >= .2:
             return True
 
-    def sell_all_positions(self):
+    def close_all_positions(self):
         '''
         Close it out!
         :return:
@@ -133,12 +127,217 @@ class strategy():
 
         pos: positions.Position
         for pos in self.positions:
+            pos.status = enums.StonksPositionState.needs_close_order
 
-        self.sell()
+
+
+    def buy(self):
+        '''
+        Iterate through each position and buy or add to positions
+        :return:
+        '''
+        pos: positions.Position
+        for pos in self.positions:
+            if pos.status == enums.StonksPositionState.needs_buy_order:
+                # enter strategy to buy here
+
+                # calculate limit value
+                limit_price = pos
+                # for now just do a market order
+
+                # calculate number of options contracts
+                number_of_options = None
+
+                # build purchase dictionary
+                payload = {enums.OrderPayload.session.value: enums.SessionOptions.NORMAL.value,
+                           enums.OrderPayload.orderType.value: enums.OrderTypeOptions.MARKET.value,
+                           enums.OrderPayload.price.value: limit_price,
+                           enums.OrderPayload.duration.value: enums.DurationOptions.DAY.value,
+                           enums.OrderPayload.quantity.value: number_of_options,
+                           enums.OrderPayload.orderLegCollection.value: [
+                               {
+                                   enums.OrderLegCollectionDict.instruction.value: enums.InstructionOptions.BUY_TO_OPEN.value,
+                                   enums.OrderLegCollectionDict.quantity.value: 1,
+                                   enums.OrderLegCollectionDict.instrument.value: {
+                                       enums.InstrumentType.symbol.value: pos.symbol,
+                                       enums.InstrumentType.assetType.value: enums.AssetTypeOptions.OPTION.value
+                                   }
+
+                               }],
+                           enums.OrderPayload.orderStrategyType.value: enums.OrderStrategyTypeOptions.SINGLE.value,
+                           enums.OrderPayload.orderId.value: np.random.random_integers(low=int(1e8), high=int(1e9),
+                                                                                       size=1)}
+
+                if self.utility_class.place_order(payload=payload):
+                    pos.update_orders(order_payload_list=[payload, ])
+
+            if pos.status == enums.StonksPositionState.needs_add_order:
+                pass
+
+    def update_positions(self):
+        '''
+        update positions and orders to match current account status
+
+        :return:
+        '''
+        # get account position dicts to feed in to positions
+        positions_dict = self.utility_class.get_account_positions()
+
+        # get orders dict for this account and prepare it
+        # get orders for today only.
+        payload = {'maxResults': 1000,
+                   'fromEnteredTime': arrow.now('America/New_York').format('YYYY-MM-DD'),
+                   'toEnteredTime': arrow.now('America/New_York').format('YYYY-MM-DD')}
+        account_orders_list = self.utility_class.get_orders(payload=payload)
+
+        # iterate through positions
+        pos: positions.Position
+        for pos in self.positions:
+            for account_position in positions_dict['positions']:
+                # only work on open positions
+                if pos.symbol == account_position['instrument']['symbol']:
+                    option_quote = self.utility_class.get_quote(symbol=pos.symbol)
+                    underlying_quote = self.utility_class.get_quote(symbol=pos.underlying_symbol)
+                    pos.update_price_and_value(underlying_quote=underlying_quote,
+                                               quote_data=option_quote,
+                                               position_data=account_position)
+
+            # update orders for all positions
+            # first collect all orders related to this position
+            local_order_list = []
+            for order in account_orders_list:
+                if order[enums.OrderLegCollectionDict.instrument.value()]['symbol'] == pos.symbol:
+                    local_order_list.append(order)
+            pos.update_orders(order_payload_list=local_order_list)
+
+    def align_orders(self):
+        '''
+        adjust orders to be in line with position states. This function determines the priority of states
+
+        By default, close status always win over open orders. This ensures positions are always closed
+
+        :return:
+        '''
+        pos: positions.Position
+        for pos in self.positions:
+            if pos.status == enums.StonksPositionState.needs_close_order:
+                order: orders_class.Order
+                for order in pos.order_list:
+                    # delete any open orders
+                    if order.is_open:
+                        self.utility_class.delete_order(order.order_id)
+
+            if not pos.orders_consistent:
+                if pos.status == enums.StonksPositionState.open_close_order:
+                    order: orders_class.Order
+                    for order in pos.order_list:
+                        # delete any open buy orders
+                        if order.order_instruction == enums.InstructionOptions.BUY_TO_OPEN.value():
+                            self.utility_class.delete_order(order.order_id)
+
+                if pos.status == enums.StonksPositionState.open_add_order:
+                    order: orders_class.Order
+                    for order in pos.order_list:
+                        # delete any open sell orders
+                        if order.order_instruction == enums.InstructionOptions.SELL_TO_CLOSE.value():
+                            self.utility_class.delete_order(order.order_id)
+
+                if pos.status == enums.StonksPositionState.open_reduce_order:
+                    order: orders_class.Order
+                    for order in pos.order_list:
+                        # delete any open buy orders
+                        if order.order_instruction == enums.InstructionOptions.BUY_TO_OPEN.value():
+                            self.utility_class.delete_order(order.order_id)
+
+                pass
+
+    def implement_stop_loss(self):
+        # input stoploss positions on all positions with open orders.
+
+        pass
+
+    def sell(self):
+        '''
+        close positions
+        :return:
+        '''
+        pos: positions.Position
+        for pos in self.positions:
+            if pos.status == enums.StonksPositionState.needs_close_order:
+                # enter strategy to sell here
+
+                # calculate limit value
+                limit_price = None
+
+                # calculate number of options contracts
+                number_of_options = None
+
+                # build purchase dictionary
+                payload = {enums.OrderPayload.session.value: enums.SessionOptions.NORMAL.value,
+                           enums.OrderPayload.orderType.value: enums.OrderTypeOptions.LIMIT.value,
+                           enums.OrderPayload.price.value: limit_price,
+                           enums.OrderPayload.duration.value: enums.DurationOptions.DAY.value,
+                           enums.OrderPayload.quantity.value: number_of_options,
+                           enums.OrderPayload.orderLegCollection.value: [
+                               {
+                                   enums.OrderLegCollectionDict.instruction.value: enums.InstructionOptions.SELL_TO_CLOSE.value,
+                                   enums.OrderLegCollectionDict.quantity.value: 1,
+                                   enums.OrderLegCollectionDict.instrument.value: {
+                                       enums.InstrumentType.symbol.value: pos.symbol,
+                                       enums.InstrumentType.assetType.value: enums.AssetTypeOptions.OPTION.value
+                                   }
+
+                               }],
+                           enums.OrderPayload.orderStrategyType.value: enums.OrderStrategyTypeOptions.SINGLE.value,
+                           enums.OrderPayload.orderId.value: np.random.random_integers(low=int(1e8), high=int(1e9),
+                                                                                       size=1)}
+
+                if self.utility_class.place_order(payload=payload):
+                    pos.update_orders(order_payload_list=[payload, ])
+
+            if pos.status == enums.StonksPositionState.needs_reduce_order:
+                pass
+
+    def check_buy_condition(self):
+        '''
+        Modifies the state of a position to require a new order, creates a position if none exists
+        :return:
+        '''
+
+        open_position = False
+        position: positions.Position
+        for position in self.positions:
+            if position.position_active:
+                open_position = True
+
+        candle = self.analytics.data['candle']
+        sma = self.analytics.data['sma'][0]
+        sma_short = self.analytics.data['sma'][1]
+        bollinger_up, bollinger_down = self.analytics.data['Bollinger'][0]
+
+        threshold = 2 * (sma_short[-1] - sma[-1]) / np.absolute(bollinger_up[-1] - bollinger_down[-1])
+
+        if threshold > self.parameters['Bollinger_top']:
+            self.buy_armed = True
+
+        if self.buy_armed and threshold <= self.parameters['Bollinger_top'] and not open_position:
+            strike_delta = 2 * (candle[-1] - bollinger_down[-1])
+            if strike_delta >= 6:
+                strike_delta = 6
+
+            #define strike price
+            self.strike_price = candle[-1] - strike_delta
+
+            #build the position
+            self.build_position()
+
+
+        if threshold < self.parameters['Bollinger_top']:
+            self.buy_armed = False
 
     def build_position(self):
         '''
-        utiltiy functions for building a position
+        build a position according to strategy, including strike price, intended limit price, quantity
         :return:
         '''
 
@@ -179,167 +378,6 @@ class strategy():
                                                  quote_data=chosen_option_quote,
                                                  ))
 
-    def buy(self):
-        '''
-        open a new position
-        :return:
-        '''
-        pos: positions.Position
-        for pos in self.positions:
-            if pos.needs_bought():
-                # enter strategy to buy here
-
-                # calculate limit value
-                limit_price = None
-
-                # calculate number of options contracts
-                number_of_options = None
-
-                # build purchase dictionary
-                payload = {enums.OrderPayload.session.value: enums.SessionOptions.NORMAL.value,
-                           enums.OrderPayload.orderType.value: enums.OrderTypeOptions.LIMIT.value,
-                           enums.OrderPayload.price.value: limit_price,
-                           enums.OrderPayload.duration.value: enums.DurationOptions.DAY.value,
-                           enums.OrderPayload.quantity.value: number_of_options,
-                           enums.OrderPayload.orderLegCollection.value: [
-                               {
-                                   enums.OrderLegCollectionDict.instruction.value: enums.InstructionOptions.BUY_TO_OPEN.value,
-                                   enums.OrderLegCollectionDict.quantity.value: 1,
-                                   enums.OrderLegCollectionDict.instrument.value: {
-                                       enums.InstrumentType.symbol.value: pos.symbol,
-                                       enums.InstrumentType.assetType.value: enums.AssetTypeOptions.OPTION.value
-                                   }
-
-                               }],
-                           enums.OrderPayload.orderStrategyType.value: enums.OrderStrategyTypeOptions.SINGLE.value,
-                           enums.OrderPayload.orderId.value: np.random.random_integers(low=int(1e8), high=int(1e9),
-                                                                                       size=1)}
-
-                if self.utility_class.place_order(payload=payload):
-                    pos.update_orders(order_payload_list=[payload, ])
-
-    def update_positions(self):
-        # get account position dicts to feed in to positions
-        positions_dict = self.utility_class.get_account_positions()
-
-        #get orders dict for this account and prepare it
-        #get orders for today only.
-        payload = {'maxResults': 1000,
-                   'fromEnteredTime': arrow.now('America/New_York').format('YYYY-MM-DD'),
-                   'toEnteredTime': arrow.now('America/New_York').format('YYYY-MM-DD')}
-        account_orders_list = self.utility_class.get_orders(payload=payload)
-
-        #iterate through positions
-        pos: positions.Position
-        for pos in self.positions:
-            for account_position in positions_dict['positions']:
-                # only work on open positions
-                if pos.symbol == account_position['instrument']['symbol']:
-                    option_quote = self.utility_class.get_quote(symbol=pos.symbol)
-                    underlying_quote = self.utility_class.get_quote(symbol=pos.underlying_symbol)
-                    pos.update_price_and_value(underlying_quote=underlying_quote,
-                                               quote_data=option_quote,
-                                               position_data=account_position)
-
-            # update orders for all positions
-            #first collect all orders related to this position
-            order_list = []
-            for order in account_orders_list:
-                if order[enums.OrderLegCollectionDict.instrument.value()]['symbol'] == pos.symbol:
-                    order_list.append(order)
-            pos.update_orders(order_payload_list=order_list)
-
-    def refresh_orders(self):
-
-
-    def implement_stop_loss(self):
-        # input stoploss positions on all positions with open orders.
-
-        pass
-
-    def sell(self):
-        '''
-        close positions
-        :return:
-        '''
-        pos: positions.Position
-        for pos in self.positions:
-            if pos.needs_sold():
-                # enter strategy to sell here
-
-                # calculate limit value
-                limit_price = None
-
-                # calculate number of options contracts
-                number_of_options = None
-
-                # build purchase dictionary
-                payload = {enums.OrderPayload.session.value: enums.SessionOptions.NORMAL.value,
-                           enums.OrderPayload.orderType.value: enums.OrderTypeOptions.LIMIT.value,
-                           enums.OrderPayload.price.value: limit_price,
-                           enums.OrderPayload.duration.value: enums.DurationOptions.DAY.value,
-                           enums.OrderPayload.quantity.value: number_of_options,
-                           enums.OrderPayload.orderLegCollection.value: [
-                               {
-                                   enums.OrderLegCollectionDict.instruction.value: enums.InstructionOptions.SELL_TO_CLOSE.value,
-                                   enums.OrderLegCollectionDict.quantity.value: 1,
-                                   enums.OrderLegCollectionDict.instrument.value: {
-                                       enums.InstrumentType.symbol.value: pos.symbol,
-                                       enums.InstrumentType.assetType.value: enums.AssetTypeOptions.OPTION.value
-                                   }
-
-                               }],
-                           enums.OrderPayload.orderStrategyType.value: enums.OrderStrategyTypeOptions.SINGLE.value,
-                           enums.OrderPayload.orderId.value: np.random.random_integers(low=int(1e8), high=int(1e9),
-                                                                                       size=1)}
-
-                if self.utility_class.place_order(payload=payload):
-                    pos.update_orders(order_payload_list=[payload, ])
-
-    def order_status(self):
-        '''
-        check on order stati for options with open orders
-        :return:
-        '''
-        pos: positions.Position
-        for pos in self.positions:
-            if pos.open_order:
-                # must write function in utility class to get order history. Close orders on options that have filled.
-                # Raise flags on orders that need re-assessed.
-                pass
-
-    def check_buy_condition(self):
-        '''
-        put buy condition function here
-        :return:
-        '''
-
-        open_position = False
-        for position in self.positions:
-            if position.is_open:
-                open_position = True
-
-        candle = self.analytics.data['candle']
-        sma = self.analytics.data['sma'][0]
-        sma_short = self.analytics.data['sma'][1]
-        bollinger_up, bollinger_down = self.analytics.data['Bollinger'][0]
-
-        threshold = 2 * (sma_short[-1] - sma[-1]) / np.absolute(bollinger_up[-1] - bollinger_down[-1])
-
-        if threshold > self.parameters['Bollinger_top']:
-            self.buy_armed = True
-
-        if self.buy_armed and threshold <= self.parameters['Bollinger_top'] and not open_position:
-            strike_delta = 2 * (candle[-1] - bollinger_down[-1])
-            if strike_delta >= 6:
-                strike_delta = 6
-
-            self.strike_price = candle[-1] - strike_delta
-            self.positions.append(position.Position())
-            self.buy()
-
-        if threshold < self.parameters['Bollinger_top']:
-            self.buy_armed = False
 
     def check_sell_condition(self):
         '''
@@ -348,15 +386,14 @@ class strategy():
         '''
         pos: positions.Position
         for pos in self.positions:
-            if pos.position_purchased:
-                #check stop profit
+            if pos.position_active:
+                # check stop profit
                 if pos.value_history[-1] >= self.parameters['stop_profit'] * pos.value_history[0]:
-                    pos.closing_position = True
+                    pos.status = enums.StonksPositionState.needs_close_order
 
-                #check stop loss
-                if pos.value_history[-1] <= self.parameters['stop_loss']*np.max(pos.value_history):
-                    pos.closing_position = True
-
+                # check stop loss
+                if pos.value_history[-1] <= self.parameters['stop_loss'] * np.max(pos.value_history):
+                    pos.status = enums.StonksPositionState.needs_close_order
 
     def implement_strategy(self, **kwargs):
         '''
@@ -382,20 +419,29 @@ class strategy():
                 # reset clock
                 update_minute_clock = True
 
+                # update the analysis
                 self.update_analytics()
 
+                # update positions and orders in those positions
+                self.update_positions()
+
+                # stop trading if account value incurs too much loss..
                 if self.check_stop_trading():
                     self.close_all_positions()
+                    self.align_orders()
                     self.sell()
                     break
                 else:
-                    #build new position
+                    # build/add to positions
                     self.check_buy_condition()
-                    self.build_position()
+
+                    # refresh orders and enter new orders
+                    self.align_orders()
                     self.buy()
 
-                    # update existing conditions, update orders
-                    self.update_positions()
-                    self.refresh_orders()
+                    # check sell conditions
                     self.check_sell_condition()
+
+                    # refresh orders and enter new orders
+                    self.align_orders()
                     self.sell()

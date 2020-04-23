@@ -44,6 +44,7 @@ class Order:
                 self.is_open = False
                 self.filledQuantity = order_dict['filledQuantity']
             elif self.current_status == enums.StatusOptions.WORKING.value():
+                self.is_open = True
                 self.filledQuantity = order_dict['filledQuantity']
 
     def time_since_last_update(self):
