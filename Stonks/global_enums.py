@@ -7,10 +7,16 @@ from enum import Enum
 class StonksPositionState(Enum):
     needs_buy_order = 1
     open_buy_order = 2
+
     needs_add_order = 3
     open_add_order = 4
+
+    needs_stop_loss_order = 9
+    open_stop_loss_order = 10
+
     needs_reduce_order = 5
     open_reduce_order = 6
+
     needs_close_order = 7
     open_close_order = 8
 
