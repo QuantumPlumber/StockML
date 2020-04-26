@@ -1,3 +1,5 @@
+import script_context
+
 import numpy as np
 import os
 import h5py
@@ -23,10 +25,12 @@ from Stonks.utilities.utility_class import UtilityClass
 
 importlib.reload(UtilityClass)
 
+from Stonks.utilities import utility_exceptions
+
 from Stonks.Strategies import putSlingerBollinger_conditions
 
 
-class strategy():
+class Strategy():
     def __init__(self, **kwargs):
         # symbol to trade
         self.symbol = kwargs['symbol']
@@ -50,8 +54,10 @@ class strategy():
         # positions list
         self.positions = []
 
-        # strategy parameters
+        # strategy parameters and variables
         self.parameters = kwargs['parameters']
+        self.buy_armed = False
+        self.sell_armed = False
 
     def trading_day_minute(self):
         market_open = arrow.now('America/New_York').replace(hours=9, minutes=30, seconds=0)
@@ -170,14 +176,19 @@ class strategy():
                     local_order_list.append(order)
             pos.update_orders(order_payload_list=local_order_list)
 
-    def check_place_order_conditions(self):
+    def position_triggers(self):
         '''
+        This function contains triggers for modifying the state of the position.
+
+        Self-consistency is handled by the align orders function.
+
         Modifies the state of each position or creates a position if it does not exist.
-        Moves positions status from needs to needs
+        Maps positions from one state to another..
+
         :return:
         '''
 
-        ########################################### create new position ################################################
+        ########################################### trigger new position ###############################################
         open_position = False
         position: positions.Position
         for position in self.positions:
@@ -208,53 +219,29 @@ class strategy():
         if threshold < self.parameters['Bollinger_top']:
             self.buy_armed = False
 
-        ########################################### update existing positions ##########################################
-        pos: positions.Position
+        ########################################### trigger sell position ##############################################
+        if threshold < self.parameters['Bollinger_bot']:
+            self.sell_armed = True
+
+        if self.sell_armed and threshold >= self.parameters['Bollinger_bot']:
+            pos: positions.Position
+            for pos in self.positions:
+                if pos.position_active:
+                    if pos.status is not enums.StonksPositionState.open_close_order:
+                        pos.status = enums.StonksPositionState.needs_close_order
+
+        if threshold > self.parameters['Bollinger_bot']:
+            self.sell_armed = False
+
+        ########################################### trigger update stop_loss ###########################################
+
+        #update stoploss every 10 minutes
         for pos in self.positions:
             if pos.position_active:
-
-                # if there is already an open order, there can be no order
-                open_order_option_states = [enums.StonksPositionState.open_buy_order,
-                                            enums.StonksPositionState.open_add_order,
-                                            enums.StonksPositionState.open_stop_loss_order,
-                                            enums.StonksPositionState.open_reduce_order,
-                                            enums.StonksPositionState.open_close_order]
-
-                # check needs buy
-                if pos.quantity == 0 and pos.status not in [enums.StonksPositionState.open_buy_order,
-                                                            enums.StonksPositionState.open_add_order,
-                                                            enums.StonksPositionState.open_stop_loss_order,
-                                                            enums.StonksPositionState.open_reduce_order,
-                                                            enums.StonksPositionState.open_close_order]:
-                    pos.status = enums.StonksPositionState.needs_buy_order
-                    continue
-
-                # check needs stop_loss
-                if pos.quantity != 0 and pos.status not in [enums.StonksPositionState.open_buy_order,
-                                                            enums.StonksPositionState.open_add_order,
-                                                            enums.StonksPositionState.open_stop_loss_order,
-                                                            enums.StonksPositionState.open_reduce_order,
-                                                            enums.StonksPositionState.open_close_order]:
-                    pos.status = enums.StonksPositionState.needs_stop_loss_order
-                    continue
-
-                # check stop profit
-                if pos.value_history[-1] >= self.parameters['stop_profit'] * pos.value_history[0] \
-                        and pos.status not in [enums.StonksPositionState.open_buy_order,
-                                               enums.StonksPositionState.open_add_order,
-                                               enums.StonksPositionState.open_reduce_order,
-                                               enums.StonksPositionState.open_close_order]:
-                    pos.status = enums.StonksPositionState.needs_close_order
-                    continue
-
-                # check stop loss
-                if pos.value_history[-1] <= self.parameters['stop_loss'] * np.max(pos.value_history) \
-                        and pos.status not in [enums.StonksPositionState.open_buy_order,
-                                               enums.StonksPositionState.open_add_order,
-                                               enums.StonksPositionState.open_reduce_order,
-                                               enums.StonksPositionState.open_close_order]:
-                    pos.status = enums.StonksPositionState.needs_close_order
-                    continue
+                if pos.status is enums.StonksPositionState.open_stop_loss_order:
+                    delta_t = arrow.now('America/New_York') - pos.last_stop_loss_update_time
+                    if delta_t.seconds > 5*60:
+                        pos.status = enums.StonksPositionState.needs_stop_loss_order
 
     def build_new_position(self):
         '''
@@ -301,11 +288,18 @@ class strategy():
 
     def align_orders(self):
         '''
+        This function aligns orders with position states and vice versa. Ensures a complete handling of all states.
+
+        This function, along with the place orders function contains a complete mapping of position states onto other
+        position states, and ensures self consistent behavior. Critically, there are no strategy triggers in either
+        function.
+
         orders should be in line with position states.
 
-        This function prevents and multiple orders from existing.
+        This function prevents multiple orders from existing.
 
-        This function cleans current orders in preparation for new orders.
+        This function deletes current orders in preparation for new orders. By default, all old orders are deleted if
+        they are open.
 
         This function determines the priority of states.
 
@@ -315,123 +309,141 @@ class strategy():
         '''
         pos: positions.Position
         for pos in self.positions:
+            if pos.position_active:
+                ########################################### needs_[order] conditions####################################
+                # basically delete all open orders if the program specifies a new order is required
 
-            ########################################### needs_[order] conditions########################################
-            # basically delete all open orders if the program specifies a new order is required
+                if pos.status is enums.StonksPositionState.needs_buy_order:
+                    # if the position has an open order or multiple open orders, cancel all those orders
+                    if pos.open_order or pos.multiple_open_orders:
+                        order: orders_class.Order
+                        for order in pos.order_list:
+                            # delete any open orders
+                            if order.is_open:
+                                self.utility_class.delete_order(order.order_id)
 
-            if pos.status is enums.StonksPositionState.needs_buy_order:
-                # if the position has an open order or multiple open orders, cancel all those orders
-                if pos.open_order or pos.multiple_open_orders:
-                    order: orders_class.Order
-                    for order in pos.order_list:
-                        # delete any open orders
-                        if order.is_open:
-                            self.utility_class.delete_order(order.order_id)
-
-                continue
-
-            if pos.status is enums.StonksPositionState.needs_add_order:
-                # if the position has an open order or multiple open orders, cancel all those orders
-                if pos.open_order or pos.multiple_open_orders:
-                    order: orders_class.Order
-                    for order in pos.order_list:
-                        # delete any open orders
-                        if order.is_open:
-                            self.utility_class.delete_order(order.order_id)
-
-                continue
-
-            if pos.status is enums.StonksPositionState.needs_stop_loss_order:
-                # if the position has an open order or multiple open orders, cancel all those orders
-                if pos.open_order or pos.multiple_open_orders:
-                    order: orders_class.Order
-                    for order in pos.order_list:
-                        # delete any open orders
-                        if order.is_open:
-                            self.utility_class.delete_order(order.order_id)
-
-                continue
-
-            if pos.status is enums.StonksPositionState.needs_reduce_order:
-                # if the position has an open order or multiple open orders, cancel all those orders
-                if pos.open_order or pos.multiple_open_orders:
-                    order: orders_class.Order
-                    for order in pos.order_list:
-                        # delete any open orders
-                        if order.is_open:
-                            self.utility_class.delete_order(order.order_id)
-
-                continue
-
-            if pos.status is enums.StonksPositionState.needs_close_order:
-                # if the position has an open order or multiple open orders, cancel all those orders
-                if pos.open_order or pos.multiple_open_orders:
-                    order: orders_class.Order
-                    for order in pos.order_list:
-                        # delete any open orders
-                        if order.is_open:
-                            self.utility_class.delete_order(order.order_id)
-
-                continue
-
-            ########################################### open_[]_order conditions########################################
-            # force contradictory orders to be canceled. Only 1 order is available
-            if pos.status is enums.StonksPositionState.open_buy_order:
-                # if the position has multiple open orders, cancel all those orders and ask for a new order
-                if pos.multiple_open_orders:
-                    order: orders_class.Order
-                    for order in pos.order_list:
-                        # delete any open orders
-                        if order.is_open:
-                            self.utility_class.delete_order(order.order_id)
-                    pos.status = enums.StonksPositionState.needs_buy_order
-                    continue
-                elif not pos.open_order:
-                    pos.status = enums.StonksPositionState.needs_stop_loss_order
                     continue
 
-            if pos.status is enums.StonksPositionState.open_add_order:
-                if pos.multiple_open_orders:
-                    order: orders_class.Order
-                    for order in pos.order_list:
-                        # delete any open orders
-                        if order.is_open:
-                            self.utility_class.delete_order(order.order_id)
-                    pos.status = enums.StonksPositionState.needs_buy_order
-                    continue
-                elif not pos.open_order:
-                    pos.status = enums.StonksPositionState.needs_stop_loss_order
+                if pos.status is enums.StonksPositionState.needs_add_order:
+                    # if the position has an open order or multiple open orders, cancel all those orders
+                    if pos.open_order or pos.multiple_open_orders:
+                        order: orders_class.Order
+                        for order in pos.order_list:
+                            # delete any open orders
+                            if order.is_open:
+                                self.utility_class.delete_order(order.order_id)
+
                     continue
 
-            if pos.status is enums.StonksPositionState.open_reduce_order:
-                if pos.multiple_open_orders:
-                    order: orders_class.Order
-                    for order in pos.order_list:
-                        # delete any open orders
-                        if order.is_open:
-                            self.utility_class.delete_order(order.order_id)
-                    pos.status = enums.StonksPositionState.needs_buy_order
-                    continue
-                elif not pos.open_order:
-                    pos.status = enums.StonksPositionState.needs_stop_loss_order
+                if pos.status is enums.StonksPositionState.needs_stop_loss_order:
+                    # if the position has an open order or multiple open orders, cancel all those orders
+                    if pos.open_order or pos.multiple_open_orders:
+                        order: orders_class.Order
+                        for order in pos.order_list:
+                            # delete any open orders
+                            if order.is_open:
+                                self.utility_class.delete_order(order.order_id)
+
                     continue
 
-            if pos.status is enums.StonksPositionState.open_close_order:
-                if pos.multiple_open_orders:
-                    order: orders_class.Order
-                    for order in pos.order_list:
-                        # delete any open orders
-                        if order.is_open:
-                            self.utility_class.delete_order(order.order_id)
-                    pos.status = enums.StonksPositionState.needs_buy_order
+                if pos.status is enums.StonksPositionState.needs_reduce_order:
+                    # if the position has an open order or multiple open orders, cancel all those orders
+                    if pos.open_order or pos.multiple_open_orders:
+                        order: orders_class.Order
+                        for order in pos.order_list:
+                            # delete any open orders
+                            if order.is_open:
+                                self.utility_class.delete_order(order.order_id)
+
                     continue
-                elif not pos.open_order:
-                    #if position is still active, then there are still shares to sell, so send back to close order.
-                    if pos.position_active:
+
+                if pos.status is enums.StonksPositionState.needs_close_order:
+                    # if the position has an open order or multiple open orders, cancel all those orders
+                    if pos.open_order or pos.multiple_open_orders:
+                        order: orders_class.Order
+                        for order in pos.order_list:
+                            # delete any open orders
+                            if order.is_open:
+                                self.utility_class.delete_order(order.order_id)
+
+                    continue
+
+                ########################################### open_[]_order conditions####################################
+                # force contradictory orders to be canceled. Only 1 order is possible
+                # default is call for a stop_loss_order unless a close order is required, this ensures protection
+                if pos.status is enums.StonksPositionState.open_buy_order:
+                    # if the position has multiple open orders, cancel all those orders and ask for a new order
+                    if pos.multiple_open_orders:
+                        order: orders_class.Order
+                        for order in pos.order_list:
+                            # delete any open orders
+                            if order.is_open:
+                                self.utility_class.delete_order(order.order_id)
+                        pos.status = enums.StonksPositionState.needs_buy_order
+                        continue
+                    elif not pos.open_order and pos.quantity != 0:
+                        pos.status = enums.StonksPositionState.needs_stop_loss_order
+                        continue
+
+                if pos.status is enums.StonksPositionState.open_add_order:
+                    if pos.multiple_open_orders:
+                        order: orders_class.Order
+                        for order in pos.order_list:
+                            # delete any open orders
+                            if order.is_open:
+                                self.utility_class.delete_order(order.order_id)
+                        pos.status = enums.StonksPositionState.needs_buy_order
+                        continue
+                    elif not pos.open_order:
+                        pos.status = enums.StonksPositionState.needs_stop_loss_order
+                        continue
+
+                if pos.status is enums.StonksPositionState.open_stop_loss_order:
+                    if pos.multiple_open_orders:
+                        order: orders_class.Order
+                        for order in pos.order_list:
+                            # delete any open orders
+                            if order.is_open:
+                                self.utility_class.delete_order(order.order_id)
                         pos.status = enums.StonksPositionState.needs_close_order
-                    continue
+                        continue
+                    elif not pos.open_order:
+                        # de-activate position if the order filled, implicitly this is true if it is no longer active..
+                        # Needs an explicit check though. If not, ask for a close order to the position.
+                        pos.de_activate_position()
+                        if pos.position_active:
+                            pos.status = enums.StonksPositionState.needs_close_order
+                        continue
 
-                continue
+                if pos.status is enums.StonksPositionState.open_reduce_order:
+                    if pos.multiple_open_orders:
+                        order: orders_class.Order
+                        for order in pos.order_list:
+                            # delete any open orders
+                            if order.is_open:
+                                self.utility_class.delete_order(order.order_id)
+                        pos.status = enums.StonksPositionState.needs_buy_order
+                        continue
+                    elif not pos.open_order:
+                        pos.status = enums.StonksPositionState.needs_stop_loss_order
+                        continue
+
+                if pos.status is enums.StonksPositionState.open_close_order:
+                    if pos.multiple_open_orders:
+                        order: orders_class.Order
+                        for order in pos.order_list:
+                            # delete any open orders
+                            if order.is_open:
+                                self.utility_class.delete_order(order.order_id)
+                        pos.status = enums.StonksPositionState.needs_close_order
+                        continue
+                    elif not pos.open_order:
+                        # de-activate position if the order filled, implicitly this is true if it is no longer active..
+                        # Needs an explicit check though. If not, ask for a close order to the position.
+                        pos.de_activate_position()
+                        if pos.position_active:
+                            pos.status = enums.StonksPositionState.needs_close_order
+                        continue
 
     def place_orders(self):
         '''
@@ -449,7 +461,7 @@ class strategy():
                     # enter strategy to buy here
 
                     # calculate limit value
-                    limit_price = pos.price_history[-1] * self.parameters['stop_loss_percentage']
+                    limit_price = np.max(pos.price_history) * self.parameters['stop_loss']
 
                     # calculate number of options contracts
                     number_of_options = pos.quantity
@@ -475,13 +487,14 @@ class strategy():
                                                                                            size=1)}
 
                     if self.utility_class.place_order(payload=payload):
+                        pos.last_stop_loss_update_time = arrow.now('America/New_York')
                         pos.status = enums.StonksPositionState.open_buy_order
 
                 if pos.status is enums.StonksPositionState.needs_buy_order:
                     # enter strategy to buy here
 
                     # calculate limit value
-                    limit_price = pos
+                    # limit_price = pos
                     # for now just do a market order
 
                     # calculate number of options contracts
@@ -490,7 +503,7 @@ class strategy():
                     # build purchase dictionary
                     payload = {enums.OrderPayload.session.value: enums.SessionOptions.NORMAL.value,
                                enums.OrderPayload.orderType.value: enums.OrderTypeOptions.MARKET.value,
-                               enums.OrderPayload.price.value: limit_price,
+                               #enums.OrderPayload.price.value: limit_price,
                                enums.OrderPayload.duration.value: enums.DurationOptions.DAY.value,
                                enums.OrderPayload.quantity.value: number_of_options,
                                enums.OrderPayload.orderLegCollection.value: [
@@ -522,15 +535,15 @@ class strategy():
                     # enter strategy to sell here
 
                     # calculate limit value
-                    limit_price = None
+                    # limit_price = None
 
                     # calculate number of options contracts
-                    number_of_options = None
+                    number_of_options = pos.quantity
 
                     # build purchase dictionary
                     payload = {enums.OrderPayload.session.value: enums.SessionOptions.NORMAL.value,
-                               enums.OrderPayload.orderType.value: enums.OrderTypeOptions.LIMIT.value,
-                               enums.OrderPayload.price.value: limit_price,
+                               enums.OrderPayload.orderType.value: enums.OrderTypeOptions.MARKET.value,
+                               # enums.OrderPayload.price.value: limit_price,
                                enums.OrderPayload.duration.value: enums.DurationOptions.DAY.value,
                                enums.OrderPayload.quantity.value: number_of_options,
                                enums.OrderPayload.orderLegCollection.value: [
@@ -550,34 +563,21 @@ class strategy():
                     if self.utility_class.place_order(payload=payload):
                         pos.status = enums.StonksPositionState.open_close_order
 
-    def check_open_order_conditions(self):
-        '''
-        Iterate through positions and check order status.
-
-        This function takes positions from 'open_order' states to 'active' or 'closed' states
-
-        :return:
-        '''
-        pos: positions.Position
-        for pos in self.positions:
-            if pos.position_active:
-                for order in pos.order_list:
-                    pass
-
     def implement_strategy(self, **kwargs):
         '''
         Implement the strategy at each timestep
         :param kwargs:
         :return:
         '''
+
+        new_minute = arrow.now('America/New_York').floor('minute')
         update_minute_clock = True
         while True:
             # trigger on the minute, every minute, when the new candle is available.
 
             # set the new minute.
             if update_minute_clock:
-                new_minute = arrow.now('America/New_York')
-                new_minute = new_minute.replace(seconds=0)
+                new_minute = arrow.now('America/New_York').floor('minute')
                 update_minute_clock = False
 
             # compute the elapsed time and trigger 5 seconds into the new minute.
@@ -585,34 +585,26 @@ class strategy():
             if elapsed_time.seconds > 65:
                 # implement the algorithm
 
-                # reset clock
+                # reset loop clock
                 update_minute_clock = True
+
+                # check if a new refresh token is required, update if so..
+                self.utility_class.update_access_token()
 
                 # update the analysis
                 self.update_analytics()
 
-                # update positions and orders in those positions
+                # update positions and orders in those positions to reflect account value
                 self.update_positions()
 
                 # stop trading if account value incurs too much loss..
                 if self.check_stop_trading():
                     self.close_all_positions()
-                    self.align_orders()
-                    self.sell()
+                    self.switch_position_state()
+                    self.place_orders()
                     break
                 else:
                     # build/add to positions
-                    self.update_positions()
-                    self.align_orders()
-                    self.check_place_order_conditions()
-                    self.place_orders()
-
-                    # refresh orders and enter new orders
-                    self.buy()
-
-                    # check sell conditions
-                    self.check_sell_condition()
-
-                    # refresh orders and enter new orders
-                    self.align_orders()
-                    self.sell()
+                    self.trigger_new_position()  # triggering changes state
+                    self.switch_position_state()  # align order after triggering
+                    self.place_orders()  # placing orders changes state

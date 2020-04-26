@@ -20,6 +20,7 @@ class Order:
 
         self.current_status = order_dict['status']
 
+
     def _get_status_from_order_dict(self, order_dict):
         for name, member in enums.StatusOptions.__members__.items():
             if order_dict['status'] == member.value():
@@ -50,4 +51,4 @@ class Order:
 
 
     def time_since_last_update(self):
-        return (arrow.now('America/New_York') - self.timestamps[-1])
+        return arrow.now('America/New_York') - self.timestamps[-1]

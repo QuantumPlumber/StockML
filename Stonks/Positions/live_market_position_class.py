@@ -29,7 +29,7 @@ class Position:
         self.value_history = []
 
         # enumerated states of the option for buying, adding, reducing and selling position.
-        self.status = None
+        self.status = enums.StonksPositionState.needs_buy_order
         self.position_active = True
 
         # tracking orders and order status:
@@ -45,6 +45,8 @@ class Position:
         self.quantity = None
         self.average_price = None
         self.currentDayProfitLossPercentage = None
+        self.stop_loss_limit = None
+        self.last_stop_loss_update_time = None
 
     def update_price_and_value(self, underlying_quote: dict, quote_data: dict, position_data: dict):
         self.underlying_quote.append(underlying_quote)
@@ -76,9 +78,6 @@ class Position:
 
         # check consistency of orders
         self.check_order_stati()
-
-        # check if the position meets definition for being closed
-        self.de_activate_position()
 
     def track_open_order_time(self, time: arrow.Arrow):
         open_times = []

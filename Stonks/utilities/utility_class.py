@@ -50,6 +50,11 @@ class UtilityClass():
         self.account_authenticated = False
         self.refresh_token_filename = 'refToken.txt'
 
+        self.time_of_last_refresh: arrow.Arrow
+
+        self.minutes_before_refresh = 25
+        self.time_of_last_refresh = arrow.now('America/New_York')
+
         ################################################################################################################
         # account variables
         ################################################################################################################
@@ -210,6 +215,7 @@ class UtilityClass():
             file.close()
 
             self.account_authenticated = True
+            self.time_of_last_refresh = arrow.now('America/New_York')
 
         else:
             raise utility_exceptions.AccessError(url=self.token_endpoint, headers=headers, data=payload)
@@ -250,6 +256,7 @@ class UtilityClass():
             if self.verbose: print(self.access_header)
 
             self.account_authenticated = True
+            self.time_of_last_refresh = arrow.now('America/New_York')
 
         else:
             raise utility_exceptions.AccessError(url=self.token_endpoint,
@@ -288,6 +295,25 @@ class UtilityClass():
                 self.credential()
                 self.authenticate()
                 self.access_accounts()
+
+    def update_access_token(self):
+        '''
+        Check if the access token needs to be updated.
+
+        Access token is good for 30 minutes, so refresh every 25 minutes just to be safe
+        :return:
+        '''
+
+        # this creates a datetime.timedelta object that only stores seconds internally.
+        delta_t = arrow.now('America/New_York') - self.time_of_last_refresh
+
+        # convert hours to seconds
+        if delta_t.seconds >= self.minutes_before_refresh * 60:
+            try:
+                self.refresh_authentication()
+                self.access_accounts()
+            except utility_exceptions.AccessError:
+                if self.verbose: print('refresh token has expired..')
 
     ####################################################################################################################
     ####################################################################################################################
@@ -402,7 +428,6 @@ class UtilityClass():
             return self.account_reply.json()[self.account_id]['securitiesAccount']['positions']
         else:
             raise utility_exceptions.AccessError(url=self.account_endpoint, headers=self.access_header)
-
 
     ####################################################################################################################
     ####################################################################################################################
