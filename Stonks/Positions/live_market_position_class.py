@@ -15,18 +15,23 @@ class Position:
         self.quote_data.append(quote_data)
 
         # define the option
-        self.type = quote_data['putCall']
-        self.expiration = quote_data['expirationDate']
+        self.type = quote_data['contractType']
+        self.expiration = arrow.Arrow(day=quote_data['expirationDay'],
+                                      month=quote_data['expirationMonth'],
+                                      year=quote_data['expirationYear'],
+                                      tzinfo='America/New_York')
         self.strike_price = quote_data['strikePrice']
         self.symbol = quote_data['symbol']
         self.underlying_symbol = underlying_quote['symbol']
 
         # define prices and initialize lists to hold price data
-        self.stock_price_at_trigger = underlying_quote['ask']  # use the ask as the initial price of the option
+        self.stock_price_at_trigger = underlying_quote['lastPrice']
 
         # strictly for holding prices when position is bought
         self.price_history = []
+        self.price_history.append(quote_data['lastPrice'])
         self.value_history = []
+        self.value_history.append(None)
 
         # enumerated states of the option for buying, adding, reducing and selling position.
         self.status = enums.StonksPositionState.needs_buy_order
@@ -42,6 +47,7 @@ class Position:
 
         # track position data from accounts api
         self.position_data = []
+        self.position_data.append(None)
         self.quantity = None
         self.average_price = None
         self.currentDayProfitLossPercentage = None
@@ -63,14 +69,18 @@ class Position:
     def update_orders(self, order_payload_list: list):
         if len(self.order_list) > 0:
             for order_payload in order_payload_list:
+                order_already_recorded = False
                 order: orders.Order
                 for order in self.order_list:
                     # update order if it has a corresponding id
-                    if order.order_id == order_payload[enums.OrderPayload.orderId.value()]:
+                    print(order.order_id)
+                    print(order_payload[enums.OrderPayload.orderId.value])
+                    if int(order.order_id) == int(order_payload[enums.OrderPayload.orderId.value]):
+                        order_already_recorded = True
                         order.update(order_dict=order_payload)
-                    else:
-                        # create the order
-                        self.order_list.append(orders.Order(order_dict=order_payload))
+                if not order_already_recorded:
+                    # create the order
+                    self.order_list.append(orders.Order(order_dict=order_payload))
         else:
             # if no orders exist then create new orders
             for order_payload in order_payload_list:
@@ -97,9 +107,9 @@ class Position:
                 self.open_order = True
                 self.num_open_orders += 1
 
-                if order.order_instruction == enums.InstructionOptions.BUY_TO_OPEN.value():
+                if order.order_instruction == enums.InstructionOptions.BUY_TO_OPEN.value:
                     self.buy_order_exists = True
-                if order.order_instruction == enums.InstructionOptions.SELL_TO_CLOSE.value():
+                if order.order_instruction == enums.InstructionOptions.SELL_TO_CLOSE.value:
                     self.sell_order_exists = True
 
         if self.num_open_orders == 0:

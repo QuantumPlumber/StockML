@@ -15,10 +15,14 @@ class AccessError(Exception):
                                'the caller is forbidden from accessing this page': 403
                                }
 
+        print('ErrorCode: {}'.format(kw_arg_list['ErrorCode']))
+
         for key, value in self.TD_Error_Codes.items():
             if value == kw_arg_list['ErrorCode']:
                 print(key)
                 break
+            else:
+                print('no valid error code passed to exception')
 
 
 class OrderError(Exception):
@@ -31,6 +35,8 @@ class OrderError(Exception):
                                'the caller is forbidden from accessing this page': 403,
                                'the order was not found': 404
                                }
+
+        print('ErrorCode: {}'.format(kw_arg_list['ErrorCode']))
 
         for key, value in self.TD_Error_Codes.items():
             if value == kw_arg_list['ErrorCode']:

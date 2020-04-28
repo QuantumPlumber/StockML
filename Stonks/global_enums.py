@@ -38,7 +38,9 @@ class DataKeys(Enum):
 ########################################################################################################################
 ########################################################################################################################
 class ComputeKeys(Enum):
-    data = 'data'
+    datetime = 'datetime'
+    candle = 'candle'
+    tradeable = 'tradeable'
     sma = 'sma'
     derivative = 'derivative'
     Bollinger = 'Bollinger'

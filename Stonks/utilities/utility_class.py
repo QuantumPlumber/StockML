@@ -208,7 +208,7 @@ class UtilityClass():
             self.refresh_token = self.token_data['refresh_token']
             if self.verbose: print(self.access_header)
 
-            self.utility_path = os.getcwd()
+            self.utility_path = os.path.abspath(os.path.dirname(__file__))
             filepath = self.utility_path + '/' + self.refresh_token_filename
             file = open(filepath, mode='w')
             file.write(self.refresh_token)
@@ -265,8 +265,9 @@ class UtilityClass():
                                                  ErrorCode=self.authenticate_reply.status_code)
 
     def check_for_refresh_token(self):
-        self.utility_path = os.getcwd()
-        filepath = self.utility_path + '/' + self.refresh_token_filename
+        #print(os.path.dirname(__file__))
+        self.utility_path = os.path.abspath(os.path.dirname(__file__))
+        filepath = self.utility_path + '\\' + self.refresh_token_filename
         if self.verbose: print(filepath)
 
         if os.path.isfile(filepath):
@@ -278,23 +279,6 @@ class UtilityClass():
         else:
             if self.verbose: print('no refresh token file detected at {}'.format(filepath))
             return False
-
-    def login(self):
-        if not self.check_for_refresh_token():
-            self.open_browser()
-            self.credential()
-            self.authenticate()
-            self.access_accounts()
-        else:
-            try:
-                self.refresh_authentication()
-                self.access_accounts()
-            except utility_exceptions.AccessError:
-                if self.verbose: print('refresh token has expired..')
-                self.open_browser()
-                self.credential()
-                self.authenticate()
-                self.access_accounts()
 
     def update_access_token(self):
         '''
@@ -314,6 +298,23 @@ class UtilityClass():
                 self.access_accounts()
             except utility_exceptions.AccessError:
                 if self.verbose: print('refresh token has expired..')
+
+    def login(self):
+        if not self.check_for_refresh_token():
+            self.open_browser()
+            self.credential()
+            self.authenticate()
+            self.access_accounts()
+        else:
+            try:
+                self.refresh_authentication()
+                self.access_accounts()
+            except utility_exceptions.AccessError:
+                if self.verbose: print('refresh token has expired..')
+                self.open_browser()
+                self.credential()
+                self.authenticate()
+                self.access_accounts()
 
     ####################################################################################################################
     ####################################################################################################################
@@ -425,7 +426,11 @@ class UtilityClass():
         self.account_reply = requests.get(url=self.account_endpoint, params=payload, headers=self.access_header)
         if self.account_reply.status_code == utility_exceptions.AccessSuccess.account_success.value:
             if self.verbose: print(self.account_data)
-            return self.account_reply.json()[self.account_id]['securitiesAccount']['positions']
+            try:
+                return self.account_reply.json()['securitiesAccount']['positions']
+            except KeyError:
+                #if no entry, then there are no positions, and return empty list.
+                return []
         else:
             raise utility_exceptions.AccessError(url=self.account_endpoint, headers=self.access_header)
 
@@ -712,7 +717,10 @@ class UtilityClass():
             # read out the status of the request
             if self.verbose: print(self.account_reply.status_code)
 
-            return self.account_reply.json()
+            quote_dict = self.account_reply.json()
+            sym, quote = list(quote_dict.items())[0]
+
+            return quote
 
         else:
             raise utility_exceptions.AccessError(ErrorCode=self.account_reply.status_code,
@@ -740,22 +748,32 @@ class UtilityClass():
         # self.access_accounts()
         # self.access_single_account(account_id=self.account_id)
 
-    def test_price_history(self):
+    def test_price_history(self, lookback_days = 1):
         # self.login()
+
 
         lookback_days = 1
         today = arrow.now('America/New_York')
-        # today = today.replace(hour=4, minute=0, second=0, microsecond=0)
         yesterday = today.shift(days=-lookback_days)
 
+        # if sunday or monday, choose friday data for the test.
+        if today.isoweekday() is 7:
+            yesterday.shift(days=-2)
+        if today.isoweekday() is 1:
+            yesterday.shift(days=-3)
+
+        # today = today.replace(hour=4, minute=0, second=0, microsecond=0)
+        yesterday = today.shift(days=-lookback_days)
+        print(yesterday.date())
+
         payload = {enums.PriceHistoryPayload.apikey.value: apikey,
-                   # enums.PriceHistoryPayload.periodType.value: enums.PeriodTypeOptions.day.value,
-                   # enums.PriceHistoryPayload.period.value: 1,
+                   enums.PriceHistoryPayload.periodType.value: enums.PeriodTypeOptions.day.value,
+                   enums.PriceHistoryPayload.period.value: 1,
                    enums.PriceHistoryPayload.frequencyType.value: enums.FrequencyTypeOptions.minute.value,
                    enums.PriceHistoryPayload.frequency.value: 1,
-                   enums.PriceHistoryPayload.startDate.value: yesterday.timestamp * 1e3,
-                   enums.PriceHistoryPayload.endDate.value: today.timestamp * 1e3,
-                   enums.PriceHistoryPayload.needExtendedHoursData.value: 'false'
+                   #enums.PriceHistoryPayload.startDate.value: yesterday.timestamp * 1e3,
+                   #enums.PriceHistoryPayload.endDate.value: today.timestamp * 1e3,
+                   enums.PriceHistoryPayload.needExtendedHoursData.value: 'True'
                    }
         starttime = time.perf_counter()
         history = self.get_price_history('SPY', payload=payload)

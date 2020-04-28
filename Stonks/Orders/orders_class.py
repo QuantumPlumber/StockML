@@ -9,9 +9,9 @@ class Order:
 
         self.is_open = None
 
-        self.order_id = order_dict['order_id']
-        self.order_instruction = order_dict[enums.OrderPayload.orderLegCollection.value()][
-            enums.OrderLegCollectionDict.instruction.value()]
+        self.order_id = order_dict['orderId']
+        self.order_instruction = order_dict[enums.OrderPayload.orderLegCollection.value][0][
+            enums.OrderLegCollectionDict.instruction.value]
 
         self.timestamps = []
         self.order_history = []
@@ -23,22 +23,22 @@ class Order:
 
     def _get_status_from_order_dict(self, order_dict):
         for name, member in enums.StatusOptions.__members__.items():
-            if order_dict['status'] == member.value():
+            if order_dict['status'] == member.value:
                 return member
 
     def update(self, order_dict):
         # check the current status of the order
 
         self.current_status = order_dict['status']
-        if self.current_status in [enums.StatusOptions.CANCELED.value(),
-                                   enums.StatusOptions.EXPIRED.value(),
-                                   enums.StatusOptions.REJECTED.value(),
-                                   enums.StatusOptions.REPLACED.value()]:
+        if self.current_status in [enums.StatusOptions.CANCELED.value,
+                                   enums.StatusOptions.EXPIRED.value,
+                                   enums.StatusOptions.REJECTED.value,
+                                   enums.StatusOptions.REPLACED.value]:
             self.is_open = False
-        elif self.current_status == enums.StatusOptions.Filled.value():
+        elif self.current_status == enums.StatusOptions.FILLED.value:
             self.is_open = False
             self.filledQuantity = order_dict['filledQuantity']
-        elif self.current_status == enums.StatusOptions.WORKING.value():
+        elif self.current_status == enums.StatusOptions.WORKING.value:
             self.is_open = True
             self.filledQuantity = order_dict['filledQuantity']
 

@@ -79,6 +79,9 @@ if __name__ == '__main__':
     # yesterday = today - datetime.timedelta(days=lookback_days)  # get the time yesterday.
 
     today = arrow.now('America/New_York')
+    #dont do anything if there is no data to grub.
+    if today.isoweekday() in [7,1]:
+        exit()
     today = today.replace(hour=4, minute=0, second=0, microsecond=0)
     yesterday = today.shift(days=-lookback_days)
 
