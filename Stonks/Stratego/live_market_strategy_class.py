@@ -7,6 +7,7 @@ import h5py
 import arrow
 import matplotlib.pyplot as plt
 import importlib
+import time
 
 from Stonks.utilities.config import apikey, username, password, secretQ
 # import Stonks.utilities.config
@@ -36,6 +37,7 @@ class Strategy:
 
         # behavior
         self.verbose = kwargs['verbose']
+        self.state = enums.StonksStrategyState.initialized
 
         # symbol to trade
         self.symbol = kwargs['symbol']
@@ -223,6 +225,258 @@ class Strategy:
         pos: positions.Position
         for pos in self.positions:
             pos.check_order_stati()
+
+    def create_position(self):
+        if self.state is enums.StonksStrategyState.triggering:
+            # check for open positions
+            open_position = False
+            pos: positions.Position
+            for pos in self.positions:
+                if pos.position_active:
+                    open_position = True
+
+            #compute analytics
+            candle = self.analytics.compute[enums.ComputeKeys.candle]
+            sma = self.analytics.compute[enums.ComputeKeys.sma][0]
+            sma_short = self.analytics.compute[enums.ComputeKeys.sma][1]
+            bollinger_up, bollinger_down = self.analytics.compute[enums.ComputeKeys.Bollinger][0]
+
+            self.threshold = 2 * (sma_short[-1] - sma[-1]) / np.absolute(bollinger_up[-1] - bollinger_down[-1])
+
+            ########################################### trigger new position ###############################################
+
+            if self.threshold > self.parameters['Bollinger_top']:
+                self.buy_armed = True
+
+            if self.buy_armed and self.threshold <= self.parameters['Bollinger_top'] and not open_position:
+                strike_delta = self.parameters['price_multiplier'] * (candle[-1] - bollinger_down[-1])
+                if strike_delta >= self.parameters['max_strike_delta']:
+                    strike_delta = self.parameters['max_strike_delta']
+
+                # define strike price
+                self.strike_price = candle[-1] - strike_delta
+
+                # build the position
+                self.build_new_position()
+
+            if self.threshold < self.parameters['Bollinger_top']:
+                self.buy_armed = False
+
+        if self.state is enums.StonksStrategyState.processing:
+            pos: positions.Position
+            for pos in self.positions:
+                if pos.position_active:
+
+                    #create buy orders
+                    if pos.status is enums.StonksPositionState.needs_buy_order:
+                        # if the position has an open order or multiple open orders, cancel all those orders
+                        if pos.open_order or pos.multiple_open_orders:
+                            order: orders_class.Order
+                            for order in pos.order_list:
+                                # delete any open orders
+                                if order.is_open:
+                                    self.utility_class.delete_order(order.order_id)
+
+                        # enter strategy to buy here
+
+                        # calculate limit value
+                        # limit_price = pos
+                        # for now just do a market order
+
+                        # calculate number of options contracts
+                        number_of_options = None
+
+                        # build purchase dictionary
+                        payload = {enums.OrderPayload.session.value: enums.SessionOptions.NORMAL.value,
+                                   enums.OrderPayload.orderType.value: enums.OrderTypeOptions.MARKET.value,
+                                   # enums.OrderPayload.price.value: limit_price,
+                                   enums.OrderPayload.duration.value: enums.DurationOptions.DAY.value,
+                                   enums.OrderPayload.quantity.value: number_of_options,
+                                   enums.OrderPayload.orderLegCollection.value: [
+                                       {
+                                           enums.OrderLegCollectionDict.instruction.value: enums.InstructionOptions.BUY_TO_OPEN.value,
+                                           enums.OrderLegCollectionDict.quantity.value: 1,
+                                           enums.OrderLegCollectionDict.instrument.value: {
+                                               enums.InstrumentType.symbol.value: pos.symbol,
+                                               enums.InstrumentType.assetType.value: enums.AssetTypeOptions.OPTION.value
+                                           }
+
+                                       }],
+                                   enums.OrderPayload.orderStrategyType.value: enums.OrderStrategyTypeOptions.SINGLE.value,
+                                   enums.OrderPayload.orderId.value: np.random.random_integers(low=int(1e8),
+                                                                                               high=int(1e9),
+                                                                                               size=1)}
+
+                        if self.utility_class.place_order(payload=payload):
+                            pos.status = enums.StonksPositionState.open_buy_order
+
+                    # handle open buy orders
+                    if pos.status is enums.StonksPositionState.open_buy_order:
+                        # if the position has multiple open orders, cancel all those orders and ask for a new order
+                        if pos.multiple_open_orders:
+                            order: orders_class.Order
+                            for order in pos.order_list:
+                                # delete any open orders
+                                if order.is_open:
+                                    self.utility_class.delete_order(order.order_id)
+                            pos.status = enums.StonksPositionState.needs_buy_order
+                        elif not pos.open_order and pos.quantity != 0:
+                            pos.status = enums.StonksPositionState.needs_stop_loss_order
+
+
+
+    def hold_position(self):
+        if self.state is enums.StonksStrategyState.triggering:
+            # trigger add/reduce/sell here
+
+            candle = self.analytics.compute[enums.ComputeKeys.candle]
+            sma = self.analytics.compute[enums.ComputeKeys.sma][0]
+            sma_short = self.analytics.compute[enums.ComputeKeys.sma][1]
+            bollinger_up, bollinger_down = self.analytics.compute[enums.ComputeKeys.Bollinger][0]
+
+            self.threshold = 2 * (sma_short[-1] - sma[-1]) / np.absolute(bollinger_up[-1] - bollinger_down[-1])
+
+            ########################################### trigger sell position ##########################################
+            if self.threshold < self.parameters['Bollinger_bot']:
+                self.sell_armed = True
+
+            if self.sell_armed and self.threshold >= self.parameters['Bollinger_bot']:
+                pos: positions.Position
+                for pos in self.positions:
+                    if pos.position_active:
+                        if pos.status is not enums.StonksPositionState.open_close_order:
+                            pos.status = enums.StonksPositionState.needs_close_order
+
+            if self.threshold > self.parameters['Bollinger_bot']:
+                self.sell_armed = False
+
+
+        if self.state is enums.StonksStrategyState.processing:
+            # ensure a stop-loss is in
+
+            for pos in self.positions:
+                if pos.position_active:
+
+                    ####################################################################################################
+                    if pos.status is enums.StonksPositionState.needs_stop_loss_order:
+                        # if the position has an open order or multiple open orders, cancel all those orders
+                        if pos.open_order or pos.multiple_open_orders:
+                            order: orders_class.Order
+                            for order in pos.order_list:
+                                # delete any open orders
+                                if order.is_open:
+                                    self.utility_class.delete_order(order.order_id)
+
+                        # enter strategy to buy here
+
+                        # calculate limit value
+                        limit_price = np.max(pos.price_history) * self.parameters['stop_loss']
+
+                        # calculate number of options contracts
+                        number_of_options = pos.quantity
+
+                        # build purchase dictionary
+                        payload = {enums.OrderPayload.session.value: enums.SessionOptions.NORMAL.value,
+                                   enums.OrderPayload.orderType.value: enums.OrderTypeOptions.STOP.value,
+                                   enums.OrderPayload.price.value: limit_price,
+                                   enums.OrderPayload.duration.value: enums.DurationOptions.DAY.value,
+                                   enums.OrderPayload.quantity.value: number_of_options,
+                                   enums.OrderPayload.orderLegCollection.value: [
+                                       {
+                                           enums.OrderLegCollectionDict.instruction.value: enums.InstructionOptions.SELL_TO_CLOSE.value,
+                                           enums.OrderLegCollectionDict.quantity.value: number_of_options,
+                                           enums.OrderLegCollectionDict.instrument.value: {
+                                               enums.InstrumentType.symbol.value: pos.symbol,
+                                               enums.InstrumentType.assetType.value: enums.AssetTypeOptions.OPTION.value
+                                           }
+
+                                       }],
+                                   enums.OrderPayload.orderStrategyType.value: enums.OrderStrategyTypeOptions.SINGLE.value,
+                                   enums.OrderPayload.orderId.value: np.random.random_integers(low=int(1e8),
+                                                                                               high=int(
+                                                                                                   1e9),
+                                                                                               size=1)}
+
+                        if self.utility_class.place_order(payload=payload):
+                            pos.last_stop_loss_update_time = arrow.now('America/New_York')
+                            pos.status = enums.StonksPositionState.open_stop_loss_order
+
+
+                    if pos.status is enums.StonksPositionState.open_stop_loss_order:
+
+                        # update stoploss every 10 minutes
+                        delta_t = arrow.now('America/New_York') - pos.last_stop_loss_update_time
+                        if delta_t.seconds > 5 * 60:
+                            pos.status = enums.StonksPositionState.needs_stop_loss_order
+
+                        if pos.multiple_open_orders:
+                            order: orders_class.Order
+                            for order in pos.order_list:
+                                # delete any open orders
+                                if order.is_open:
+                                    self.utility_class.delete_order(order.order_id)
+                            pos.status = enums.StonksPositionState.needs_close_order
+                            continue
+
+                        elif not pos.open_order:
+                            # de-activate position if the order filled, implicitly this is true if it is no longer active..
+                            # Needs an explicit check though. If not, ask for a close order to the position.
+                            pos.de_activate_position()
+                            if pos.position_active:
+                                pos.status = enums.StonksPositionState.needs_close_order
+                            continue
+
+
+    def expand_position(self):
+        if self.state is enums.StonksStrategyState.triggering:
+            # put in functionality here, otherwise just ensure that a stoploss is in.
+            pass
+        if self.state is enums.StonksStrategyState.processing:
+            pass
+
+    def reduce_position(self):
+        if self.state is enums.StonksStrategyState.triggering:
+            # put in functionality here, otherwise just ensure that a stoploss is in.
+            pass
+        if self.state is enums.StonksStrategyState.processing:
+            pass
+
+    def sell_position(self):
+        if self.state is enums.StonksStrategyState.triggering:
+            pass
+
+        if self.state is enums.StonksStrategyState.processing:
+            pos: positions.Position
+            for pos in self.positions:
+                if pos.position_active:
+
+                    if pos.status is enums.StonksPositionState.needs_close_order:
+                        # if the position has an open order or multiple open orders, cancel all those orders
+                        if pos.open_order or pos.multiple_open_orders:
+                            order: orders_class.Order
+                            for order in pos.order_list:
+                                # delete any open orders
+                                if order.is_open:
+                                    self.utility_class.delete_order(order.order_id)
+
+                    if pos.status is enums.StonksPositionState.open_close_order:
+                        if pos.multiple_open_orders:
+                            order: orders_class.Order
+                            for order in pos.order_list:
+                                # delete any open orders
+                                if order.is_open:
+                                    self.utility_class.delete_order(order.order_id)
+                            pos.status = enums.StonksPositionState.needs_close_order
+                            continue
+                        elif not pos.open_order:
+                            # de-activate position if the order filled, implicitly this is true if it is no longer active..
+                            # Needs an explicit check though. If not, ask for a close order to the position.
+                            pos.de_activate_position()
+                            if pos.position_active:
+                                pos.status = enums.StonksPositionState.needs_close_order
+                            continue
+
+
 
 
     def position_triggers(self):
@@ -538,7 +792,7 @@ class Strategy:
 
                     if self.utility_class.place_order(payload=payload):
                         pos.last_stop_loss_update_time = arrow.now('America/New_York')
-                        pos.status = enums.StonksPositionState.open_buy_order
+                        pos.status = enums.StonksPositionState.open_stop_loss_order
 
                 if pos.status is enums.StonksPositionState.needs_buy_order:
                     # enter strategy to buy here
@@ -644,17 +898,25 @@ class Strategy:
                 # update the analysis
                 self.update_analytics()
 
-                # update positions and orders in those positions to reflect account value
-                self.update_positions()
+                # set the state to cause triggered behavior
+                self.state = enums.StonksStrategyState.triggering
 
-                # stop trading if account value incurs too much loss..
-                if self.check_stop_trading():
-                    self.close_all_positions()
-                    self.switch_position_state()
-                    self.place_orders()
-                    break
-                else:
-                    # build/add to positions
-                    self.trigger_new_position()  # triggering changes state
-                    self.switch_position_state()  # align order after triggering
-                    self.place_orders()  # placing orders changes state
+            # update positions and orders in those positions to reflect account value
+            self.update_positions()
+
+            # stop trading if account value incurs too much loss..
+            if self.check_stop_trading():
+                self.close_all_positions()
+                # needs another function to end activity
+            else:
+                # build/add to positions
+                self.create_position()
+                self.hold_position()
+                self.expand_position()
+                self.reduce_position()
+                self.sell_position()
+
+            # set the state to resolve processing
+            self.state = enums.StonksStrategyState.processing
+            # Wait to redo loop every 20 seconds
+            time.sleep(20)
