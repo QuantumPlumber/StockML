@@ -55,7 +55,7 @@ class Strategy:
         self.today = arrow.now('America/New_York')
         self.today = self.today.replace(hour=0, minute=0, second=0, microsecond=0)
         self.get_options_end_date()
-        #self.current_second = self.trading_day_second()
+        # self.current_second = self.trading_day_second()
 
         # save initial account values and current account values
         self.initial_account_values = self.get_current_account_values()
@@ -313,6 +313,7 @@ class Strategy:
 
                         # calculate limit value
                         # limit_price = pos
+                        limit_price = pos.price_history[0] # the original price of the option at trigger time.
                         # for now just do a market order
 
                         # calculate number of options contracts
@@ -320,8 +321,9 @@ class Strategy:
 
                         # build purchase dictionary
                         payload = {enums.OrderPayload.session.value: enums.SessionOptions.NORMAL.value,
-                                   enums.OrderPayload.orderType.value: enums.OrderTypeOptions.MARKET.value,
-                                   # enums.OrderPayload.price.value: limit_price,
+                                   #enums.OrderPayload.orderType.value: enums.OrderTypeOptions.MARKET.value,
+                                   enums.OrderPayload.orderType.value: enums.OrderTypeOptions.LIMIT.value,
+                                   enums.OrderPayload.price.value: limit_price,
                                    enums.OrderPayload.duration.value: enums.DurationOptions.DAY.value,
                                    enums.OrderPayload.quantity.value: number_of_options,
                                    enums.OrderPayload.orderLegCollection.value: [
@@ -335,12 +337,12 @@ class Strategy:
 
                                        }],
                                    enums.OrderPayload.orderStrategyType.value: enums.OrderStrategyTypeOptions.SINGLE.value,
-                                   enums.OrderPayload.orderId.value: np.random.random_integers(low=int(1e8),
-                                                                                               high=int(1e9),
-                                                                                               size=1)[0]}
+                                   #enums.OrderPayload.orderId.value: int(np.random.random_integers(low=int(1e8),high=int(1e9),size=1)[0])
+                                   }
 
                         if self.utility_class.place_order(payload=payload):
                             pos.status = enums.StonksPositionState.open_buy_order
+                            continue
 
                     # handle open buy orders
                     if pos.status is enums.StonksPositionState.open_buy_order:
@@ -352,8 +354,10 @@ class Strategy:
                                 if order.is_open:
                                     self.utility_class.delete_order(order.order_id)
                             pos.status = enums.StonksPositionState.needs_buy_order
+                            continue
                         elif not pos.open_order and pos.quantity != 0:
                             pos.status = enums.StonksPositionState.needs_stop_loss_order
+                            continue
 
     def build_new_position(self):
         '''
@@ -476,10 +480,8 @@ class Strategy:
 
                                        }],
                                    enums.OrderPayload.orderStrategyType.value: enums.OrderStrategyTypeOptions.SINGLE.value,
-                                   enums.OrderPayload.orderId.value: np.random.random_integers(low=int(1e8),
-                                                                                               high=int(
-                                                                                                   1e9),
-                                                                                               size=1)}
+                                   #enums.OrderPayload.orderId.value: np.random.random_integers(low=int(1e8),high=int(1e9),size=1)
+                                   }
 
                         if self.utility_class.place_order(payload=payload):
                             pos.last_stop_loss_update_time = arrow.now('America/New_York')

@@ -38,7 +38,8 @@ class Order:
         elif self.current_status == enums.StatusOptions.FILLED.value:
             self.is_open = False
             self.filledQuantity = order_dict['filledQuantity']
-        elif self.current_status == enums.StatusOptions.WORKING.value:
+        elif self.current_status in [enums.StatusOptions.WORKING.value,
+                                     enums.StatusOptions.QUEUED.value]:
             self.is_open = True
             self.filledQuantity = order_dict['filledQuantity']
 

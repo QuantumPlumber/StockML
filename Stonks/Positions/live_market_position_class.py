@@ -74,8 +74,8 @@ class Position:
                 order: orders.Order
                 for order in self.order_list:
                     # update order if it has a corresponding id
-                    print(order.order_id)
-                    print(order_payload[enums.OrderPayload.orderId.value])
+                    #print(order.order_id)
+                    #print(order_payload[enums.OrderPayload.orderId.value])
                     if int(order.order_id) == int(order_payload[enums.OrderPayload.orderId.value]):
                         order_already_recorded = True
                         order.update(order_dict=order_payload)

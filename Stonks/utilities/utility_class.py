@@ -265,7 +265,7 @@ class UtilityClass():
                                                  ErrorCode=self.authenticate_reply.status_code)
 
     def check_for_refresh_token(self):
-        #print(os.path.dirname(__file__))
+        # print(os.path.dirname(__file__))
         self.utility_path = os.path.abspath(os.path.dirname(__file__))
         filepath = self.utility_path + '\\' + self.refresh_token_filename
         if self.verbose: print(filepath)
@@ -354,7 +354,6 @@ class UtilityClass():
         else:
             raise utility_exceptions.AccessError(url=self.account_endpoint, headers=self.access_header)
 
-
     def access_single_account(self, account_id):
         '''
         Access the single account to get data
@@ -430,7 +429,7 @@ class UtilityClass():
             try:
                 return self.account_reply.json()['securitiesAccount']['positions']
             except KeyError:
-                #if no entry, then there are no positions, and return empty list.
+                # if no entry, then there are no positions, and return empty list.
                 return []
         else:
             raise utility_exceptions.AccessError(url=self.account_endpoint, headers=self.access_header)
@@ -522,7 +521,7 @@ class UtilityClass():
             self.account_id, order_id)
         # post the request
         self.account_reply = requests.delete(url=self.order_endpoint, headers=self.access_header)
-        if self.account_reply.status_code == utility_exceptions.AccessSuccess.order_success.value:
+        if self.account_reply.status_code == utility_exceptions.AccessSuccess.account_success.value:
             if self.verbose: print('deleted order'.format(order_id))
         else:
             raise utility_exceptions.AccessError(ErrorCode=self.account_reply.status_code,
@@ -749,9 +748,8 @@ class UtilityClass():
         # self.access_accounts()
         # self.access_single_account(account_id=self.account_id)
 
-    def test_price_history(self, lookback_days = 1):
+    def test_price_history(self, lookback_days=1):
         # self.login()
-
 
         lookback_days = 1
         today = arrow.now('America/New_York')
@@ -772,8 +770,8 @@ class UtilityClass():
                    enums.PriceHistoryPayload.period.value: 1,
                    enums.PriceHistoryPayload.frequencyType.value: enums.FrequencyTypeOptions.minute.value,
                    enums.PriceHistoryPayload.frequency.value: 1,
-                   #enums.PriceHistoryPayload.startDate.value: yesterday.timestamp * 1e3,
-                   #enums.PriceHistoryPayload.endDate.value: today.timestamp * 1e3,
+                   # enums.PriceHistoryPayload.startDate.value: yesterday.timestamp * 1e3,
+                   # enums.PriceHistoryPayload.endDate.value: today.timestamp * 1e3,
                    enums.PriceHistoryPayload.needExtendedHoursData.value: 'True'
                    }
         starttime = time.perf_counter()
@@ -830,13 +828,14 @@ class UtilityClass():
                        {enums.OrderLegCollectionDict.instruction.value: enums.InstructionOptions.BUY_TO_OPEN.value,
                         enums.OrderLegCollectionDict.quantity.value: 1,
                         enums.OrderLegCollectionDict.instrument.value: {
-                            enums.InstrumentType.symbol.value: 'SPY_041320P274',
+                            enums.InstrumentType.symbol.value: 'SPY_050120P274',
                             enums.InstrumentType.assetType.value: enums.AssetTypeOptions.OPTION.value
                         }
 
                         }],
                    enums.OrderPayload.orderStrategyType.value: enums.OrderStrategyTypeOptions.SINGLE.value,
-                   enums.OrderPayload.orderId.value: np.random.random_integers(low=int(1e8), high=int(1e9), size=1)}
+                   enums.OrderPayload.orderId.value: int(
+                       np.random.random_integers(low=int(1e8), high=int(1e9), size=1)[0])}
 
         self.place_order(payload=payload)
 

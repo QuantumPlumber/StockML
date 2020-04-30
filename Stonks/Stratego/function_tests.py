@@ -15,7 +15,7 @@ import importlib
 
 importlib.reload(strategy_class)
 
-parameters = {'Bollinger_top': .0, 'Bollinger_bot': -2.0, 'stop_loss': .2, 'profit': .5, 'price_multiplier': 2,
+parameters = {'Bollinger_top': .0, 'Bollinger_bot': -2.0, 'stop_loss': .8, 'profit': .5, 'price_multiplier': 2,
               'max_strike_delta': 6, 'stop_trading': .2}
 
 compute_dict = {enums.ComputeKeys.sma: [10, 30],
@@ -27,7 +27,6 @@ strategy_instance = strategy_class.Strategy(symbol='SPY',
                                             compute_dict=compute_dict,
                                             parameters=parameters,
                                             verbose=True)
-strategy_instance.utility_class.login()
 
 start_time = time.perf_counter()
 strategy_instance.trading_day_time()
@@ -66,46 +65,68 @@ end_time = time.perf_counter() - start_time
 print(end_time)
 
 start_time = time.perf_counter()
+print('position status:')
 strategy_instance.update_positions()
 print([pos.status for pos in strategy_instance.positions])
+print([[order.current_status, order.order_id] for pos in strategy_instance.positions for order in pos.order_list])
 end_time = time.perf_counter() - start_time
 print(end_time)
 
 ########################################################################################################################
 # test position creation
+
 start_time = time.perf_counter()
+print('testing position creation')
 strategy_instance.state = enums.StonksStrategyState.triggering
 strategy_instance.buy_armed = True
 strategy_instance.threshold = .1 * parameters['Bollinger_top']
+
+print('calling create_position:')
 strategy_instance.create_position()
+
+print('position status:')
+strategy_instance.update_positions()
 print([pos.status for pos in strategy_instance.positions])
+print([[order.current_status, order.order_id] for pos in strategy_instance.positions for order in pos.order_list])
 end_time = time.perf_counter() - start_time
 print(end_time)
 
 # test creation order handling
 start_time = time.perf_counter()
 strategy_instance.state = enums.StonksStrategyState.processing
+print('creating a new needs_buy_order..')
 pos: positions.Position
 for pos in strategy_instance.positions:
     pos.status = enums.StonksPositionState.needs_buy_order
     pos.target_quantity = 1
+print('calling create_position:')
 strategy_instance.create_position()
 
-print([pos.status for pos in strategy_instance.positions])
+print('position status:')
 strategy_instance.update_positions()
-print([pos.open_order for pos in strategy_instance.positions])
-strategy_instance.create_position()
 print([pos.status for pos in strategy_instance.positions])
+print([[order.current_status, order.order_id] for pos in strategy_instance.positions for order in pos.order_list])
+
+
+print('calling create_position:')
+strategy_instance.create_position()
+
+print('position status:')
+strategy_instance.update_positions()
+print([pos.status for pos in strategy_instance.positions])
+print([[order.current_status, order.order_id] for pos in strategy_instance.positions for order in pos.order_list])
+
 end_time = time.perf_counter() - start_time
 print(end_time)
 
 #manually delete orders
 
-
+'''
 start_time = time.perf_counter()
 strategy_instance.hold_position()
 end_time = time.perf_counter() - start_time
 print(end_time)
+'''
 
 '''
 #old functions:
