@@ -55,7 +55,7 @@ class Strategy:
         self.today = arrow.now('America/New_York')
         self.today = self.today.replace(hour=0, minute=0, second=0, microsecond=0)
         self.get_options_end_date()
-        self.current_minute = self.trading_day_minute()
+        #self.current_second = self.trading_day_second()
 
         # save initial account values and current account values
         self.initial_account_values = self.get_current_account_values()
@@ -70,12 +70,14 @@ class Strategy:
         self.buy_armed = False
         self.sell_armed = False
 
-    def trading_day_minute(self):
+    def trading_day_time(self):
         market_open = arrow.now('America/New_York').replace(hour=9, minute=30, second=0)
+        market_close = arrow.now('America/New_York').replace(hour=16, minute=0, second=0)
         current_time = arrow.now('America/New_York').replace(second=0)
-        difference = current_time - market_open
-        minute = difference.seconds // 60
-        return minute
+        delta_t_from_open = current_time - market_open
+        self.seconds_from_open = delta_t_from_open.seconds
+        delta_t_from_close = market_close - current_time
+        self.seconds_to_close = delta_t_from_close.seconds
 
     def get_options_end_date(self):
         '''
@@ -95,7 +97,7 @@ class Strategy:
 
     def get_current_account_values(self):
         account = self.utility_class.access_accounts()
-        current_account_values = self.utility_class.account_data[0]['securitiesAccount']['currentBalances']
+        current_account_values = account[0]['securitiesAccount']['currentBalances']
         self.current_account_values = current_account_values
         return current_account_values
 
@@ -181,19 +183,24 @@ class Strategy:
             for pos in self.positions:
                 # only work on open positions
                 if pos.symbol == account_position['instrument']['symbol'] and pos.position_active:
-                    option_quote = self.utility_class.get_quote(symbol=pos.symbol)
-                    underlying_quote = self.utility_class.get_quote(symbol=pos.underlying_symbol)
-                    pos.update_price_and_value(underlying_quote=underlying_quote,
-                                               quote_data=option_quote,
+                    self.option_quote = self.utility_class.get_quote(symbol=pos.symbol)
+                    self.underlying_quote = self.utility_class.get_quote(symbol=pos.underlying_symbol)
+                    pos.update_price_and_value(underlying_quote=self.underlying_quote,
+                                               quote_data=self.option_quote,
                                                position_data=account_position)
                 # if there are no matching open positions, create a new position..
                 else:
                     if self.verbose:
                         print('creating new position from unknown account position..')
-                    option_quote = self.utility_class.get_quote(symbol=pos.symbol)
-                    underlying_quote = self.utility_class.get_quote(symbol=pos.underlying_symbol)
-                    new_position = positions.Position(underlying_quote=underlying_quote,
-                                                      quote_data=option_quote)
+                    self.option_quote = self.utility_class.get_quote(symbol=pos.symbol)
+                    self.underlying_quote = self.utility_class.get_quote(symbol=pos.underlying_symbol)
+                    new_position = positions.Position(underlying_quote=self.underlying_quote,
+                                                      quote_data=self.option_quote,
+                                                      quantity=None)
+                    # update new position:
+                    new_position.update_price_and_value(underlying_quote=self.underlying_quote,
+                                                        quote_data=self.option_quote,
+                                                        position_data=account_position)
 
                     self.positions.append(new_position)
 
@@ -205,7 +212,13 @@ class Strategy:
                 self.underlying_quote = self.utility_class.get_quote(
                     symbol=account_position['instrument']['underlyingSymbol'])
                 new_position = positions.Position(underlying_quote=self.underlying_quote,
-                                                  quote_data=self.option_quote)
+                                                  quote_data=self.option_quote,
+                                                  quantity=None)
+
+                # update new position:
+                new_position.update_price_and_value(underlying_quote=self.underlying_quote,
+                                                    quote_data=self.option_quote,
+                                                    position_data=account_position)
 
                 self.positions.append(new_position)
 
@@ -235,7 +248,7 @@ class Strategy:
                 if pos.position_active:
                     open_position = True
 
-            #compute analytics
+            # compute analytics
             candle = self.analytics.compute[enums.ComputeKeys.candle]
             sma = self.analytics.compute[enums.ComputeKeys.sma][0]
             sma_short = self.analytics.compute[enums.ComputeKeys.sma][1]
@@ -243,7 +256,7 @@ class Strategy:
 
             self.threshold = 2 * (sma_short[-1] - sma[-1]) / np.absolute(bollinger_up[-1] - bollinger_down[-1])
 
-            ########################################### trigger new position ###############################################
+            ########################################### trigger new position ###########################################
 
             if self.threshold > self.parameters['Bollinger_top']:
                 self.buy_armed = True
@@ -256,6 +269,25 @@ class Strategy:
                 # define strike price
                 self.strike_price = candle[-1] - strike_delta
 
+                #################################### Compute capital for new position ################################
+
+                self.get_current_account_values()
+                self.trading_day_time()
+
+                minimum_investment = self.parameters['minimum_position_size_fraction'] * \
+                                     self.initial_account_values['cashAvailableForTrading']
+                expected_current_cash = self.initial_account_values['cashAvailableForTrading'] * \
+                                        (self.seconds_to_close / (self.seconds_from_open + self.seconds_to_close))
+                self.target_capital = self.current_account_values['cashAvailableForTrading'] - expected_current_cash
+
+                # check to see if we are below threshold for minimum investment
+                if self.target_capital <= minimum_investment:
+                    # check if the minimum investment is greater than available cash.
+                    if self.current_account_values['cashAvailableForTrading'] < minimum_investment:
+                        self.target_capital = self.current_account_values['cashAvailableForTrading']
+                    else:
+                        self.target_capital = minimum_investment
+
                 # build the position
                 self.build_new_position()
 
@@ -267,7 +299,7 @@ class Strategy:
             for pos in self.positions:
                 if pos.position_active:
 
-                    #create buy orders
+                    # create buy orders
                     if pos.status is enums.StonksPositionState.needs_buy_order:
                         # if the position has an open order or multiple open orders, cancel all those orders
                         if pos.open_order or pos.multiple_open_orders:
@@ -284,7 +316,7 @@ class Strategy:
                         # for now just do a market order
 
                         # calculate number of options contracts
-                        number_of_options = None
+                        number_of_options = pos.target_quantity
 
                         # build purchase dictionary
                         payload = {enums.OrderPayload.session.value: enums.SessionOptions.NORMAL.value,
@@ -305,7 +337,7 @@ class Strategy:
                                    enums.OrderPayload.orderStrategyType.value: enums.OrderStrategyTypeOptions.SINGLE.value,
                                    enums.OrderPayload.orderId.value: np.random.random_integers(low=int(1e8),
                                                                                                high=int(1e9),
-                                                                                               size=1)}
+                                                                                               size=1)[0]}
 
                         if self.utility_class.place_order(payload=payload):
                             pos.status = enums.StonksPositionState.open_buy_order
@@ -323,7 +355,60 @@ class Strategy:
                         elif not pos.open_order and pos.quantity != 0:
                             pos.status = enums.StonksPositionState.needs_stop_loss_order
 
+    def build_new_position(self):
+        '''
+        build a position according to strategy, including strike price, intended limit price, quantity
+        :return:
+        '''
 
+        payload = {'symbol': 'SPY',
+                   'contractType': 'PUT',
+                   'strikeCount': 20,
+                   'includeQuotes': 'TRUE',
+                   'strategy': 'SINGLE',
+                   'fromDate': self.today.shift(days=-1).format('YYYY-MM-DD'),
+                   'toDate': self.options_end_date.shift(days=1).format('YYYY-MM-DD')}
+
+        self.options_chain_quote = self.utility_class.get_options_chain(payload=payload)
+
+        putExpDateMap = self.options_chain_quote['putExpDateMap']
+        date_keys = list(putExpDateMap.keys())
+        if len(date_keys) > 1:
+            self.putExpDateMap = None
+            return False
+        else:
+            self.options_chain_dict = self.options_chain_quote['putExpDateMap'][date_keys[0]]
+
+        # now find the closest strike price to the strategy price
+        strikes_prices = []
+        quote_prices = []
+        for key in self.options_chain_dict.keys():
+            strikes_prices.append(self.options_chain_dict[key][0]['strikePrice'])
+            quote_prices.append(self.options_chain_dict[key][0]['lastPrice'])
+
+        price_difference = np.abs(np.array(strikes_prices) - self.strike_price)
+        min_price_difference = price_difference.min()
+
+        self.best_strike_location = np.where(price_difference == min_price_difference)[0]
+
+        # check if this option is affordable
+        if self.target_capital < quote_prices[self.best_strike_location][0] * 100:
+            # target option is too expensive, do not create it.
+            return
+        else:
+            target_quantity = self.target_capital // quote_prices[self.best_strike_location] * 100
+
+        chosen_option_symbol = list(self.options_chain_dict.keys())[self.best_strike_location]
+        # underlying_security_quote = self.options_chain_dict['underlying']
+
+        self.option_quote = self.utility_class.get_quote(symbol=chosen_option_symbol)
+        for symbol, quote in self.option_quote.items():
+            underlying_symbol = quote['underlying']
+        self.underlying_quote = self.utility_class.get_quote(symbol=underlying_symbol)
+
+        self.positions.append(positions.Position(underlying_quote=self.option_quote,
+                                                 quote_data=self.option_quote,
+                                                 quantity=int(target_quantity)))
 
     def hold_position(self):
         if self.state is enums.StonksStrategyState.triggering:
@@ -349,7 +434,6 @@ class Strategy:
 
             if self.threshold > self.parameters['Bollinger_bot']:
                 self.sell_armed = False
-
 
         if self.state is enums.StonksStrategyState.processing:
             # ensure a stop-loss is in
@@ -401,7 +485,6 @@ class Strategy:
                             pos.last_stop_loss_update_time = arrow.now('America/New_York')
                             pos.status = enums.StonksPositionState.open_stop_loss_order
 
-
                     if pos.status is enums.StonksPositionState.open_stop_loss_order:
 
                         # update stoploss every 10 minutes
@@ -425,7 +508,6 @@ class Strategy:
                             if pos.position_active:
                                 pos.status = enums.StonksPositionState.needs_close_order
                             continue
-
 
     def expand_position(self):
         if self.state is enums.StonksStrategyState.triggering:
@@ -475,9 +557,6 @@ class Strategy:
                             if pos.position_active:
                                 pos.status = enums.StonksPositionState.needs_close_order
                             continue
-
-
-
 
     def position_triggers(self):
         '''
@@ -545,50 +624,6 @@ class Strategy:
                     delta_t = arrow.now('America/New_York') - pos.last_stop_loss_update_time
                     if delta_t.seconds > 5 * 60:
                         pos.status = enums.StonksPositionState.needs_stop_loss_order
-
-    def build_new_position(self):
-        '''
-        build a position according to strategy, including strike price, intended limit price, quantity
-        :return:
-        '''
-
-        payload = {'symbol': 'SPY',
-                   'contractType': 'PUT',
-                   'strikeCount': 20,
-                   'includeQuotes': 'TRUE',
-                   'strategy': 'SINGLE',
-                   'fromDate': self.today.shift(days=-1).format('YYYY-MM-DD'),
-                   'toDate': self.options_end_date.shift(days=1).format('YYYY-MM-DD')}
-
-        self.options_chain_quote = self.utility_class.get_options_chain(payload=payload)
-
-        putExpDateMap = self.options_chain_quote['putExpDateMap']
-        date_keys = list(putExpDateMap.keys())
-        if len(date_keys) > 1:
-            self.putExpDateMap = None
-            return False
-        else:
-            self.options_chain_dict = self.options_chain_quote['putExpDateMap'][date_keys[0]]
-
-        # now find the closest strike price to the strategy price
-        strikes_prices = []
-        for key in self.options_chain_dict.keys():
-            strikes_prices.append(self.options_chain_dict[key][0]['strikePrice'])
-
-        price_difference = np.abs(np.array(strikes_prices) - self.strike_price)
-        min_price_difference = price_difference.min()
-        self.best_strike_location = np.where(price_difference == min_price_difference)[0]
-
-        chosen_option_symbol = list(self.options_chain_dict.keys())[self.best_strike_location]
-        # underlying_security_quote = self.options_chain_dict['underlying']
-
-        self.option_quote = self.utility_class.get_quote(symbol=chosen_option_symbol)
-        for symbol, quote in self.option_quote.items():
-            underlying_symbol = quote['underlying']
-        self.underlying_quote = self.utility_class.get_quote(symbol=underlying_symbol)
-
-        self.positions.append(positions.Position(underlying_quote=self.option_quote,
-                                                 quote_data=self.option_quote))
 
     def align_orders(self):
         '''

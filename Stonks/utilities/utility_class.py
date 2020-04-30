@@ -348,11 +348,12 @@ class UtilityClass():
         self.account_reply = requests.get(url=self.accounts_endpoint, headers=self.access_header)
         if self.account_reply.status_code == utility_exceptions.AccessSuccess.account_success.value:
             self.account_data = self.account_reply.json()
+            self.account_id = self.account_data[0]['securitiesAccount']['accountId']
+            return self.account_data
             if self.verbose: print(self.account_data)
         else:
             raise utility_exceptions.AccessError(url=self.account_endpoint, headers=self.access_header)
 
-        self.account_id = self.account_data[0]['securitiesAccount']['accountId']
 
     def access_single_account(self, account_id):
         '''

@@ -6,7 +6,7 @@ from Stonks.Orders import orders_class as orders
 
 
 class Position:
-    def __init__(self, underlying_quote: dict, quote_data: dict):
+    def __init__(self, underlying_quote: dict, quote_data: dict, quantity: int):
 
         # save all quote data passed in
         self.underlying_quote = []
@@ -23,6 +23,7 @@ class Position:
         self.strike_price = quote_data['strikePrice']
         self.symbol = quote_data['symbol']
         self.underlying_symbol = underlying_quote['symbol']
+        self.target_quantity = quantity
 
         # define prices and initialize lists to hold price data
         self.stock_price_at_trigger = underlying_quote['lastPrice']

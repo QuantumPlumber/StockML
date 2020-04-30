@@ -4,6 +4,13 @@ import arrow
 import matplotlib.pyplot as plt
 from Stonks import global_enums as enums
 from Stonks.Stratego import live_market_strategy_class as strategy_class
+from Stonks.Analytics import live_market_analytics_class as analytics_class
+from Stonks.Positions import live_market_position_class as positions
+from Stonks.Orders import orders_class
+from Stonks.utilities import utility_class
+
+from Stonks.utilities import utility_exceptions
+
 import importlib
 
 importlib.reload(strategy_class)
@@ -20,9 +27,10 @@ strategy_instance = strategy_class.Strategy(symbol='SPY',
                                             compute_dict=compute_dict,
                                             parameters=parameters,
                                             verbose=True)
+strategy_instance.utility_class.login()
 
 start_time = time.perf_counter()
-strategy_instance.trading_day_minute()
+strategy_instance.trading_day_time()
 end_time = time.perf_counter() - start_time
 print(end_time)
 
@@ -59,8 +67,48 @@ print(end_time)
 
 start_time = time.perf_counter()
 strategy_instance.update_positions()
+print([pos.status for pos in strategy_instance.positions])
 end_time = time.perf_counter() - start_time
 print(end_time)
+
+########################################################################################################################
+# test position creation
+start_time = time.perf_counter()
+strategy_instance.state = enums.StonksStrategyState.triggering
+strategy_instance.buy_armed = True
+strategy_instance.threshold = .1 * parameters['Bollinger_top']
+strategy_instance.create_position()
+print([pos.status for pos in strategy_instance.positions])
+end_time = time.perf_counter() - start_time
+print(end_time)
+
+# test creation order handling
+start_time = time.perf_counter()
+strategy_instance.state = enums.StonksStrategyState.processing
+pos: positions.Position
+for pos in strategy_instance.positions:
+    pos.status = enums.StonksPositionState.needs_buy_order
+    pos.target_quantity = 1
+strategy_instance.create_position()
+
+print([pos.status for pos in strategy_instance.positions])
+strategy_instance.update_positions()
+print([pos.open_order for pos in strategy_instance.positions])
+strategy_instance.create_position()
+print([pos.status for pos in strategy_instance.positions])
+end_time = time.perf_counter() - start_time
+print(end_time)
+
+#manually delete orders
+
+
+start_time = time.perf_counter()
+strategy_instance.hold_position()
+end_time = time.perf_counter() - start_time
+print(end_time)
+
+'''
+#old functions:
 
 start_time = time.perf_counter()
 strategy_instance.buy_armed = True
@@ -78,3 +126,4 @@ start_time = time.perf_counter()
 strategy_instance.align_orders()
 end_time = time.perf_counter() - start_time
 print(end_time)
+'''
