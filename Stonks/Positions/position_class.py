@@ -1,9 +1,26 @@
 import numpy as np
+import enum
+
+class OptionType(enum):
+    PUT = 'PUT'
+    CALL = 'CALL'
+
 
 
 class position():
 
-    def __init__(self, strike_price, volatility, t, stock_price, expiration=60 * 6 + 30, stop_loss=.8, stop_profit=2.0):
+    def __init__(self,
+                 strike_price,
+                 volatility,
+                 t,
+                 stock_price,
+                 expiration=60 * 6 + 30,
+                 stop_loss=.8,
+                 stop_profit=2.0,
+                 option_type = OptionType.PUT):
+
+        self.option_type = option_type
+
         self.expiration = expiration
         self.strike_price = strike_price
 
@@ -44,7 +61,11 @@ class position():
         # define initial conditions
         price_tree = stock_price * up ** (2 * np.arange(self.n_binomial) - self.n_binomial)
 
-        binomial_tree = self.strike_price - price_tree
+        if self.option_type is OptionType.PUT:
+            binomial_tree = self.strike_price - price_tree
+        elif self.option_type is OptionType.CALL:
+            binomial_tree = price_tree - self.strike_price
+
         binomial_tree[binomial_tree <= 0] = 0
 
         # reduce binomial tree to determine the price:

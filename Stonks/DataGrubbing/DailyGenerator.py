@@ -8,7 +8,6 @@ import arrow
 
 
 def days_in_directory(filedirectory='D:/StockData/', ticker='SPY'):
-
     file_number = 0
 
     for direntry in os.scandir(filedirectory):
@@ -20,7 +19,7 @@ def days_in_directory(filedirectory='D:/StockData/', ticker='SPY'):
 
         if direntry.is_file():
             filepath = direntry.path
-            #print(filepath)
+            # print(filepath)
             try:
                 datafile = h5py.File(filepath, 'r')
             except:
@@ -32,7 +31,11 @@ def days_in_directory(filedirectory='D:/StockData/', ticker='SPY'):
             print('no \'SPY\' data in file: {}'.format(filepath))
             continue
 
-        file_number += 1
+        print('isoweekday is: {}'.format(
+            type(arrow.get(time_data[time_data.shape[0] // 2] * 1e-3).to('America/New_York').isoweekday())))
+        if arrow.get(time_data[time_data.shape[0] // 2] * 1e-3).to('America/New_York').isoweekday() in [1, 2, 3, 4, 5]:
+            file_number += 1
+
         datafile.close()
 
     return file_number
@@ -61,6 +64,9 @@ def data_file_generator(filedirectory='D:/StockData/', ticker='SPY'):
         time_data = datafile[ticker]['datetime'][...]
         if time_data.shape[0] == 0:
             print('no \'SPY\' data in file: {}'.format(filepath))
+            continue
+        elif arrow.get(time_data[time_data.shape[0] // 2] * 1e-3).isoweekday() not in [1, 2, 3, 4, 5]:
+            print('not a weekday')
             continue
         else:
             mid_day = time_data[time_data.shape[0] // 2]

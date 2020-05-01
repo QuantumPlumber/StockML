@@ -2,6 +2,7 @@ import script_context
 
 import os
 import h5py
+import time
 import matplotlib.pyplot as plt
 import numpy as np
 from Stonks.Analytics import Analytics
@@ -166,16 +167,25 @@ if __name__ == "__main__":
     parameters = {'Bollinger_top': .0, 'Bollinger_bot': -2.0, 'stop_loss': .2, 'profit': .5}
 
     days_in_directory = DailyGenerator.days_in_directory(filedirectory='D:/StockData/', ticker=ticker)
+    print('days in directory: {}'.format(days_in_directory))
     fig, axs = plt.subplots(nrows=days_in_directory, ncols=2, sharex=False, figsize=(30, int(4 * days_in_directory)))
 
     daily_percent_gain = []
     for ax_row, [datafile, date] in zip(axs,
                                         DailyGenerator.data_file_generator(filedirectory=filedirectory, ticker=ticker)):
+
         print('Date: {}'.format(date))
+        start_time = time.perf_counter()
         daily_percent_gain.append(slinger(ax=ax_row, datafile=datafile, ticker=ticker, parameters=parameters))
+        duration = time.perf_counter() - start_time
+        print('time for strategy run on this day: {}'.format(duration))
 
     print(daily_percent_gain)
     array_profit = np.array(daily_percent_gain)
     array_profit[np.isnan(array_profit)] = 0
+
+    plt.figure(figsize=(10, 10))
+    plt.plot(daily_percent_gain, '.')
+
     total_profit = np.product(1 + array_profit)
     print('total value over {}-day period is : {}'.format(len(daily_percent_gain), total_profit))
