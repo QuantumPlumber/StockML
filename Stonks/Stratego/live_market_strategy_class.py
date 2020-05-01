@@ -43,7 +43,7 @@ class Strategy:
         self.symbol = kwargs['symbol']
 
         # utility class to handle API functions
-        self.utility_class = utility_class.UtilityClass(verbose=True)
+        self.utility_class = utility_class.UtilityClass(verbose=False)
         # login
         self.utility_class.login()
 
@@ -178,6 +178,7 @@ class Strategy:
         self.account_orders_list = self.utility_class.get_orders(payload=payload)
 
         for account_position in self.account_positions:
+            position_found = False
             # iterate through positions
             pos: positions.Position
             for pos in self.positions:
@@ -188,22 +189,25 @@ class Strategy:
                     pos.update_price_and_value(underlying_quote=self.underlying_quote,
                                                quote_data=self.option_quote,
                                                position_data=account_position)
+                    position_found = True
                 # if there are no matching open positions, create a new position..
-                else:
-                    if self.verbose:
-                        print('creating new position from unknown account position..')
-                    self.option_quote = self.utility_class.get_quote(symbol=pos.symbol)
-                    self.underlying_quote = self.utility_class.get_quote(symbol=pos.underlying_symbol)
-                    new_position = positions.Position(underlying_quote=self.underlying_quote,
-                                                      quote_data=self.option_quote,
-                                                      quantity=None)
-                    # update new position:
-                    new_position.update_price_and_value(underlying_quote=self.underlying_quote,
-                                                        quote_data=self.option_quote,
-                                                        position_data=account_position)
 
-                    self.positions.append(new_position)
+            if not position_found:
+                if self.verbose:
+                    print('creating new position from unknown account position..')
+                self.option_quote = self.utility_class.get_quote(symbol=account_position['instrument']['symbol'])
+                self.underlying_quote = self.utility_class.get_quote(
+                    symbol=account_position['instrument']['underlyingSymbol'])
+                new_position = positions.Position(underlying_quote=self.underlying_quote,
+                                                  quote_data=self.option_quote,
+                                                  quantity=None)
+                # update new position:
+                new_position.update_price_and_value(underlying_quote=self.underlying_quote,
+                                                    quote_data=self.option_quote,
+                                                    position_data=account_position)
 
+                self.positions.append(new_position)
+            '''
             # if there are no positions, create a new position..
             if len(self.positions) == 0:
                 if self.verbose:
@@ -221,6 +225,7 @@ class Strategy:
                                                     position_data=account_position)
 
                 self.positions.append(new_position)
+            '''
 
         # iterate through positions
         pos: positions.Position
@@ -242,11 +247,11 @@ class Strategy:
     def create_position(self):
         if self.state is enums.StonksStrategyState.triggering:
             # check for open positions
-            open_position = False
+            self.open_position = False
             pos: positions.Position
             for pos in self.positions:
                 if pos.position_active:
-                    open_position = True
+                    self.open_position = True
 
             # compute analytics
             candle = self.analytics.compute[enums.ComputeKeys.candle]
@@ -261,7 +266,9 @@ class Strategy:
             if self.threshold > self.parameters['Bollinger_top']:
                 self.buy_armed = True
 
-            if self.buy_armed and self.threshold <= self.parameters['Bollinger_top'] and not open_position:
+            # TODO: revert to previous condition
+            # if self.buy_armed and self.threshold <= self.parameters['Bollinger_top'] and not self.open_position:
+            if True:
                 strike_delta = self.parameters['price_multiplier'] * (candle[-1] - bollinger_down[-1])
                 if strike_delta >= self.parameters['max_strike_delta']:
                     strike_delta = self.parameters['max_strike_delta']
@@ -313,15 +320,16 @@ class Strategy:
 
                         # calculate limit value
                         # limit_price = pos
-                        limit_price = pos.price_history[0] # the original price of the option at trigger time.
+                        limit_price = pos.price_history[0]  # the original price of the option at trigger time.
                         # for now just do a market order
 
                         # calculate number of options contracts
                         number_of_options = pos.target_quantity
 
+                        # TODO: revert to market order
                         # build purchase dictionary
                         payload = {enums.OrderPayload.session.value: enums.SessionOptions.NORMAL.value,
-                                   #enums.OrderPayload.orderType.value: enums.OrderTypeOptions.MARKET.value,
+                                   # enums.OrderPayload.orderType.value: enums.OrderTypeOptions.MARKET.value,
                                    enums.OrderPayload.orderType.value: enums.OrderTypeOptions.LIMIT.value,
                                    enums.OrderPayload.price.value: limit_price,
                                    enums.OrderPayload.duration.value: enums.DurationOptions.DAY.value,
@@ -337,7 +345,7 @@ class Strategy:
 
                                        }],
                                    enums.OrderPayload.orderStrategyType.value: enums.OrderStrategyTypeOptions.SINGLE.value,
-                                   #enums.OrderPayload.orderId.value: int(np.random.random_integers(low=int(1e8),high=int(1e9),size=1)[0])
+                                   # enums.OrderPayload.orderId.value: int(np.random.random_integers(low=int(1e8),high=int(1e9),size=1)[0])
                                    }
 
                         if self.utility_class.place_order(payload=payload):
@@ -355,6 +363,11 @@ class Strategy:
                                     self.utility_class.delete_order(order.order_id)
                             pos.status = enums.StonksPositionState.needs_buy_order
                             continue
+
+                        if not pos.open_order:
+                            pos.status = enums.StonksPositionState.needs_buy_order
+                            continue
+
                         elif not pos.open_order and pos.quantity != 0:
                             pos.status = enums.StonksPositionState.needs_stop_loss_order
                             continue
@@ -364,6 +377,8 @@ class Strategy:
         build a position according to strategy, including strike price, intended limit price, quantity
         :return:
         '''
+
+        if self.verbose: print('inside the new position building function')
 
         payload = {'symbol': 'SPY',
                    'contractType': 'PUT',
@@ -384,30 +399,33 @@ class Strategy:
             self.options_chain_dict = self.options_chain_quote['putExpDateMap'][date_keys[0]]
 
         # now find the closest strike price to the strategy price
-        strikes_prices = []
+        strike_prices = []
         quote_prices = []
         for key in self.options_chain_dict.keys():
-            strikes_prices.append(self.options_chain_dict[key][0]['strikePrice'])
-            quote_prices.append(self.options_chain_dict[key][0]['lastPrice'])
+            strike_prices.append(self.options_chain_dict[key][0]['strikePrice'])
+            quote_prices.append(self.options_chain_dict[key][0]['ask'])
+        strike_prices = np.array(strike_prices)
+        quote_prices = np.array(quote_prices)
 
-        price_difference = np.abs(np.array(strikes_prices) - self.strike_price)
+        price_difference = np.abs(strike_prices - self.strike_price)
         min_price_difference = price_difference.min()
 
-        self.best_strike_location = np.where(price_difference == min_price_difference)[0]
+        self.best_strike_location = np.nonzero(price_difference == min_price_difference)[0][0]
 
         # check if this option is affordable
-        if self.target_capital < quote_prices[self.best_strike_location][0] * 100:
+        if self.target_capital < quote_prices[self.best_strike_location] * 100:
             # target option is too expensive, do not create it.
             return
         else:
-            target_quantity = self.target_capital // quote_prices[self.best_strike_location] * 100
+            target_quantity = self.target_capital // (quote_prices[self.best_strike_location] * 100)
 
-        chosen_option_symbol = list(self.options_chain_dict.keys())[self.best_strike_location]
+        chosen_option_symbol = \
+            self.options_chain_dict[list(self.options_chain_dict.keys())[self.best_strike_location]][0]['symbol']
+
         # underlying_security_quote = self.options_chain_dict['underlying']
 
         self.option_quote = self.utility_class.get_quote(symbol=chosen_option_symbol)
-        for symbol, quote in self.option_quote.items():
-            underlying_symbol = quote['underlying']
+        underlying_symbol = self.option_quote['underlying']
         self.underlying_quote = self.utility_class.get_quote(symbol=underlying_symbol)
 
         self.positions.append(positions.Position(underlying_quote=self.option_quote,
@@ -480,7 +498,7 @@ class Strategy:
 
                                        }],
                                    enums.OrderPayload.orderStrategyType.value: enums.OrderStrategyTypeOptions.SINGLE.value,
-                                   #enums.OrderPayload.orderId.value: np.random.random_integers(low=int(1e8),high=int(1e9),size=1)
+                                   # enums.OrderPayload.orderId.value: np.random.random_integers(low=int(1e8),high=int(1e9),size=1)
                                    }
 
                         if self.utility_class.place_order(payload=payload):

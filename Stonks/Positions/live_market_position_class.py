@@ -68,24 +68,21 @@ class Position:
         self.currentDayProfitLossPercentage = position_data['currentDayProfitLossPercentage']
 
     def update_orders(self, order_payload_list: list):
-        if len(self.order_list) > 0:
-            for order_payload in order_payload_list:
-                order_already_recorded = False
-                order: orders.Order
-                for order in self.order_list:
-                    # update order if it has a corresponding id
-                    #print(order.order_id)
-                    #print(order_payload[enums.OrderPayload.orderId.value])
-                    if int(order.order_id) == int(order_payload[enums.OrderPayload.orderId.value]):
-                        order_already_recorded = True
-                        order.update(order_dict=order_payload)
-                if not order_already_recorded:
-                    # create the order
-                    self.order_list.append(orders.Order(order_dict=order_payload))
-        else:
-            # if no orders exist then create new orders
-            for order_payload in order_payload_list:
-                self.order_list.append(orders.Order(order_dict=order_payload))
+        for order_payload in order_payload_list:
+            order_already_recorded = False
+            order: orders.Order
+            for order in self.order_list:
+                # update order if it has a corresponding id
+                #print(order.order_id)
+                #print(order_payload[enums.OrderPayload.orderId.value])
+                if int(order.order_id) == int(order_payload[enums.OrderPayload.orderId.value]):
+                    order_already_recorded = True
+                    order.update(order_dict=order_payload)
+            if not order_already_recorded:
+                # create the order
+                order = orders.Order(order_dict=order_payload)
+                order.update(order_dict=order_payload)
+                self.order_list.append(order)
 
         # check consistency of orders
         self.check_order_stati()
