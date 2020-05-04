@@ -8,6 +8,7 @@ import arrow
 import matplotlib.pyplot as plt
 import importlib
 import time
+import math
 
 from Stonks.utilities.config import apikey, username, password, secretQ
 # import Stonks.utilities.config
@@ -43,7 +44,7 @@ class Strategy:
         self.symbol = kwargs['symbol']
 
         # utility class to handle API functions
-        self.utility_class = utility_class.UtilityClass(verbose=False)
+        self.utility_class = utility_class.UtilityClass(verbose=True)
         # login
         self.utility_class.login()
 
@@ -108,6 +109,8 @@ class Strategy:
         '''
 
         today = arrow.now('America/New_York')
+        # TODO: remove shift...
+        today = today.shift(days=-3)
         yesterday = today.shift(hours=-1)
 
         # build the payload.
@@ -123,6 +126,7 @@ class Strategy:
         price_history = self.utility_class.get_price_history(symbol=self.symbol, payload=payload)
 
         data = pd.DataFrame.from_dict(price_history['candles'])
+        #print(data)
         self.analytics.compute_analytics(data=data)
 
     def change_metaparameters(self, **kwargs):
@@ -364,13 +368,11 @@ class Strategy:
                             pos.status = enums.StonksPositionState.needs_buy_order
                             continue
 
-                        if not pos.open_order:
-                            pos.status = enums.StonksPositionState.needs_buy_order
-                            continue
-
-                        elif not pos.open_order and pos.quantity != 0:
+                        if not pos.open_order and int(pos.quantity) > 0:
                             pos.status = enums.StonksPositionState.needs_stop_loss_order
-                            continue
+                        elif not pos.open_order:
+                            pos.status = enums.StonksPositionState.needs_buy_order
+
 
     def build_new_position(self):
         '''
@@ -476,15 +478,22 @@ class Strategy:
                         # enter strategy to buy here
 
                         # calculate limit value
-                        limit_price = np.max(pos.price_history) * self.parameters['stop_loss']
+                        stop_price_offset = np.max(pos.price_history) * self.parameters['stop_loss']
+
+                        stop_price_offset = math.trunc(stop_price_offset*100.) / 100.
+
+                        print('stop_price_offset is: {}'.format(stop_price_offset))
 
                         # calculate number of options contracts
-                        number_of_options = pos.quantity
+                        number_of_options = int(pos.quantity)
+
+                        print('number_of_options is: {}'.format(number_of_options))
 
                         # build purchase dictionary
                         payload = {enums.OrderPayload.session.value: enums.SessionOptions.NORMAL.value,
+                                   # TODO: revert back to stop order
                                    enums.OrderPayload.orderType.value: enums.OrderTypeOptions.STOP.value,
-                                   enums.OrderPayload.price.value: limit_price,
+                                   enums.OrderPayload.stopPrice.value: stop_price_offset,
                                    enums.OrderPayload.duration.value: enums.DurationOptions.DAY.value,
                                    enums.OrderPayload.quantity.value: number_of_options,
                                    enums.OrderPayload.orderLegCollection.value: [
@@ -504,6 +513,7 @@ class Strategy:
                         if self.utility_class.place_order(payload=payload):
                             pos.last_stop_loss_update_time = arrow.now('America/New_York')
                             pos.status = enums.StonksPositionState.open_stop_loss_order
+                            continue
 
                     if pos.status is enums.StonksPositionState.open_stop_loss_order:
 

@@ -17,7 +17,7 @@ importlib.reload(strategy_class)
 
 if __name__ == '__main__':
 
-    parameters = {'Bollinger_top': .0, 'Bollinger_bot': -2.0, 'stop_loss': .8, 'profit': .5, 'price_multiplier': 2,
+    parameters = {'Bollinger_top': .0, 'Bollinger_bot': -2.0, 'stop_loss': .2, 'profit': .5, 'price_multiplier': 2,
                   'max_strike_delta': 6, 'minimum_position_size_fraction': .3, 'stop_trading': .2}
 
     compute_dict = {enums.ComputeKeys.sma: [10, 30],
@@ -30,7 +30,9 @@ if __name__ == '__main__':
                                                 parameters=parameters,
                                                 verbose=True)
 
-    ########################################################################################################################
+    print('###########################################################################################################')
+    print()
+    print('###########################################################################################################')
     print('testing simple functions:')
 
     start_time = time.perf_counter()
@@ -49,9 +51,9 @@ if __name__ == '__main__':
     # print(end_time)
 
     input('press enter to continue')
-    ########################################################################################################################
-
-    ########################################################################################################################
+    print('###########################################################################################################')
+    print()
+    print('###########################################################################################################')
     print('testing analysis update')
     start_time = time.perf_counter()
     strategy_instance.update_analytics()
@@ -65,9 +67,9 @@ if __name__ == '__main__':
     print('most recent time in analysis is: {}'.format(times[-1]))
 
     input('press enter to continue')
-    ########################################################################################################################
-
-    ########################################################################################################################
+    print('###########################################################################################################')
+    print()
+    print('###########################################################################################################')
     print('testing more simple functions:')
 
     start_time = time.perf_counter()
@@ -81,22 +83,23 @@ if __name__ == '__main__':
     # print(end_time)
 
     input('press enter to continue')
-    ########################################################################################################################
-
-    ########################################################################################################################
+    print('###########################################################################################################')
+    print()
+    print('###########################################################################################################')
     print('testing position updates:')
     start_time = time.perf_counter()
     print('position status:')
     strategy_instance.update_positions()
     print([pos.status for pos in strategy_instance.positions])
-    print([[order.current_status, order.order_id, order.is_open] for pos in strategy_instance.positions for order in pos.order_list])
+    print([[order.current_status, order.order_id, order.is_open] for pos in \
+           strategy_instance.positions for order in pos.order_list if order.is_open != False])
     end_time = time.perf_counter() - start_time
     # print(end_time)
 
     input('press enter to continue')
-    ########################################################################################################################
-
-    ########################################################################################################################
+    print('###########################################################################################################')
+    print()
+    print('###########################################################################################################')
     print('testing position creation')
 
     start_time = time.perf_counter()
@@ -117,14 +120,15 @@ if __name__ == '__main__':
     print('position target_quantity and quantity:')
     print([[pos.target_quantity, pos.quantity] for pos in strategy_instance.positions])
     print('position orders:')
-    print([[order.current_status, order.order_id, order.is_open] for pos in strategy_instance.positions for order in pos.order_list])
+    print([[order.current_status, order.order_id, order.is_open] for pos in \
+           strategy_instance.positions for order in pos.order_list if order.is_open != False])
     # end_time = time.perf_counter() - start_time
     # print(end_time)
 
     input('press enter to continue')
-    ########################################################################################################################
-
-    ########################################################################################################################
+    print('###########################################################################################################')
+    print()
+    print('###########################################################################################################')
     print('test order handling for needs_buy_order position state')
 
 
@@ -145,12 +149,13 @@ if __name__ == '__main__':
     print('position target_quantity and quantity:')
     print([[pos.target_quantity, pos.quantity] for pos in strategy_instance.positions])
     print('position orders:')
-    print([[order.current_status, order.order_id, order.is_open] for pos in strategy_instance.positions for order in pos.order_list])
+    print([[order.current_status, order.order_id, order.is_open] for pos in \
+           strategy_instance.positions for order in pos.order_list if order.is_open != False])
 
     input('press enter to continue')
-    ########################################################################################################################
-
-    ########################################################################################################################
+    print('###########################################################################################################')
+    print()
+    print('###########################################################################################################')
     print('test order handling for open_buy_order position state')
 
     print('calling create_position:')
@@ -167,11 +172,13 @@ if __name__ == '__main__':
     print('position target_quantity and quantity:')
     print([[pos.target_quantity, pos.quantity] for pos in strategy_instance.positions])
     print('position orders:')
-    print([[order.current_status, order.order_id, order.is_open] for pos in strategy_instance.positions for order in pos.order_list])
+    print([[order.current_status, order.order_id, order.is_open] for pos in \
+           strategy_instance.positions for order in pos.order_list if order.is_open != False])
 
     # manually delete orders
     input('manually delete open orders to continue testing, press enter when ready')
 
+    strategy_instance.update_positions()
     print('calling create_position:')
     strategy_instance.state = enums.StonksStrategyState.processing
     strategy_instance.create_position()
@@ -179,18 +186,29 @@ if __name__ == '__main__':
     print('You should now see the position state either advance to needs_stop_loss or back to needs_buy_order')
 
     strategy_instance.update_positions()
-    print('position status:')
+    print('position open order:')
     print([pos.status for pos in strategy_instance.positions])
     print('position target_quantity and quantity:')
     print([[pos.target_quantity, pos.quantity] for pos in strategy_instance.positions])
     print('position orders:')
-    print([[order.current_status, order.order_id, order.is_open] for pos in strategy_instance.positions for order in pos.order_list])
+    print([[order.current_status, order.order_id, order.is_open] for pos in \
+           strategy_instance.positions for order in pos.order_list if order.is_open != False])
 
     input('press enter to continue')
-    ########################################################################################################################
-
-    ########################################################################################################################
+    print('###########################################################################################################')
+    print()
+    print('###########################################################################################################')
     print('test order handling for needs_stop_loss position state')
+
+    strategy_instance.update_positions()
+    print('position open order:')
+    print([pos.status for pos in strategy_instance.positions])
+    print([pos.price_history for pos in strategy_instance.positions])
+    print('position target_quantity and quantity:')
+    print([[pos.target_quantity, pos.quantity] for pos in strategy_instance.positions])
+    print('position orders:')
+    print([[order.current_status, order.order_id, order.is_open] for pos in \
+           strategy_instance.positions for order in pos.order_list if order.is_open != False])
 
     print('calling create_position:')
     strategy_instance.state = enums.StonksStrategyState.processing
@@ -204,12 +222,14 @@ if __name__ == '__main__':
     print('position target_quantity and quantity:')
     print([[pos.target_quantity, pos.quantity] for pos in strategy_instance.positions])
     print('position orders:')
-    print([[order.current_status, order.order_id, order.is_open] for pos in strategy_instance.positions for order in pos.order_list])
+    print([[order.current_status, order.order_id, order.is_open] for pos in \
+           strategy_instance.positions for order in pos.order_list if order.is_open != False])
 
     input('press enter to continue')
-    ########################################################################################################################
-
-
-    ########################################################################################################################
+    print('###########################################################################################################')
+    print()
+    print('###########################################################################################################')
     print('end of test')
-    ########################################################################################################################
+    print('###########################################################################################################')
+    print()
+    print('###########################################################################################################')

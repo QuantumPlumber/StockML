@@ -49,7 +49,7 @@ class Position:
         # track position data from accounts api
         self.position_data = []
         self.position_data.append(None)
-        self.quantity = None
+        self.quantity = 0
         self.average_price = None
         self.currentDayProfitLossPercentage = None
         self.stop_loss_limit = None

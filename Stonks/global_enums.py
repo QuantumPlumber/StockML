@@ -90,6 +90,7 @@ class OrderPayload(Enum):
     complexOrderStrategyType = 'complexOrderStrategyType'
     quantity = 'quantity'
     stopPrice = 'stopPrice'
+    stopPriceOffset = 'stopPriceOffset'
     stopType = 'stopType'
     price = 'price'
     orderLegCollection = 'orderLegCollection'

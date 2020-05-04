@@ -837,6 +837,26 @@ class UtilityClass():
                    enums.OrderPayload.orderId.value: int(
                        np.random.random_integers(low=int(1e8), high=int(1e9), size=1)[0])}
 
+        payload = {enums.OrderPayload.session.value: enums.SessionOptions.NORMAL.value,
+                   # TODO: revert back to stop order
+                   enums.OrderPayload.orderType.value: enums.OrderTypeOptions.STOP.value,
+                   enums.OrderPayload.stopPrice.value: 3.0,
+                   enums.OrderPayload.duration.value: enums.DurationOptions.DAY.value,
+                   enums.OrderPayload.quantity.value: 1,
+                   enums.OrderPayload.orderLegCollection.value: [
+                       {
+                           enums.OrderLegCollectionDict.instruction.value: enums.InstructionOptions.SELL_TO_CLOSE.value,
+                           enums.OrderLegCollectionDict.quantity.value: 1,
+                           enums.OrderLegCollectionDict.instrument.value: {
+                               enums.InstrumentType.symbol.value: 'SPY_050420P280',
+                               enums.InstrumentType.assetType.value: enums.AssetTypeOptions.OPTION.value
+                           }
+
+                       }],
+                   enums.OrderPayload.orderStrategyType.value: enums.OrderStrategyTypeOptions.SINGLE.value,
+                   # enums.OrderPayload.orderId.value: np.random.random_integers(low=int(1e8),high=int(1e9),size=1)
+                   }
+
         self.place_order(payload=payload)
 
 
