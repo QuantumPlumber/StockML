@@ -9,6 +9,7 @@ import arrow
 
 def days_in_directory(filedirectory='D:/StockData/', ticker='SPY'):
     file_number = 0
+    unique_dates = []
 
     for direntry in os.scandir(filedirectory):
         result_dict = {}
@@ -31,20 +32,30 @@ def days_in_directory(filedirectory='D:/StockData/', ticker='SPY'):
             print('no \'SPY\' data in file: {}'.format(filepath))
             continue
 
-        print('isoweekday is: {}'.format(
-            type(arrow.get(time_data[time_data.shape[0] // 2] * 1e-3).to('America/New_York').isoweekday())))
-        if arrow.get(time_data[time_data.shape[0] // 2] * 1e-3).to('America/New_York').isoweekday() in [1, 2, 3, 4, 5]:
-            file_number += 1
+        mid_day = arrow.get(time_data[time_data.shape[0] // 2] * 1e-3).to('America/New_York')
+        date = mid_day.date()
+
+        print('isoweekday is: {}'.format(type(mid_day.isoweekday())))
+        if mid_day.isoweekday() not in [1, 2, 3, 4, 5]:
+            print('not a weekday')
+            continue
+        else:
+            if date not in unique_dates:
+                file_number += 1
+                unique_dates.append(date)
+            else:
+                continue
 
         datafile.close()
 
-    return file_number
+    return file_number, unique_dates
 
 
 def data_file_generator(filedirectory='D:/StockData/', ticker='SPY'):
     result_list = []
     meta_result_list = []
 
+    unique_dates = []
     for direntry in os.scandir(filedirectory):
         result_dict = {}
         meta_result_dict = {}
@@ -65,13 +76,17 @@ def data_file_generator(filedirectory='D:/StockData/', ticker='SPY'):
         if time_data.shape[0] == 0:
             print('no \'SPY\' data in file: {}'.format(filepath))
             continue
-        elif arrow.get(time_data[time_data.shape[0] // 2] * 1e-3).isoweekday() not in [1, 2, 3, 4, 5]:
+
+        mid_day = arrow.get(time_data[time_data.shape[0] // 2] * 1e-3).to('America/New_York')
+        date = mid_day.date()
+
+        if arrow.get(time_data[time_data.shape[0] // 2] * 1e-3).isoweekday() not in [1, 2, 3, 4, 5]:
             print('not a weekday')
             continue
         else:
-            mid_day = time_data[time_data.shape[0] // 2]
-            utc_time = arrow.get(mid_day * 1e-3).to('utc')
-            utc_time = utc_time.shift(hours=-4)  # must explicitely shift time for numpy to recognize
-            date = str(utc_time.date())
+            if date not in unique_dates:
+                unique_dates.append(date)
+                yield datafile, str(date)
+            else:
+                continue
 
-        yield datafile, date

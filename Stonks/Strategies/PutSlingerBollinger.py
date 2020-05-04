@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from Stonks.Analytics import Analytics
 import time as tm
+import arrow
 import importlib
 from Stonks.Positions import position_class
 
@@ -26,6 +27,13 @@ def Bollinger_strat(time,
                     parameters):
     print(parameters)
 
+    blocked = False
+
+    initial_capital = 1.
+    used_capital = 0
+    working_capital = initial_capital
+    min_trade_capital = .10
+
     put_buy_locs = []
     put_buy_price = []
     put_buy_option_price = []
@@ -35,7 +43,12 @@ def Bollinger_strat(time,
     put_sell_price = []
     put_sell_option_price = []
 
+    position_value = []
+
     positions_list = []
+
+    start_of_trading_minute = 9 * 60 + 30
+    end_of_trading_minute = 16 * 60
 
     open_put_position = False
     put_price = 0
@@ -45,13 +58,27 @@ def Bollinger_strat(time,
     sell_armed = False
     sell_trigger = False
     for i in np.arange(sma.shape[0]):
-        gm_time = tm.gmtime(time[i] * 1e-3)
-        if (gm_time[3] - 4 > 9) and (gm_time[3] - 4 < 16):
-            current_time = ((gm_time[3] - 4) * 60 + gm_time[4]) - (9 * 60)  # in minutes from open
+        trade_time = arrow.get(time[i] * 1e-3).to('America/New_York')
+        current_minute = trade_time.hour * 60 + trade_time.minute  # in minutes from open
+        time_to_expiry = end_of_trading_minute - current_minute
+
+        working_capital = initial_capital * (current_minute - start_of_trading_minute) / (
+                end_of_trading_minute - start_of_trading_minute)
+
+        trade_capital = working_capital - used_capital
+
+        if trade_capital < min_trade_capital:
+            trade_capital = min_trade_capital
+
+        if start_of_trading_minute < current_minute < end_of_trading_minute:
+            # current_time = ((gm_time[3] - 4) * 60 + gm_time[4]) - (9 * 60)  # in minutes from open
+
+            #print(used_capital)
 
             ############### Toggle buy ###########################
 
-            threshold = 2 * (sma_short[i] - sma[i]) / np.absolute(bollinger_up[i] - bollinger_down[i])
+            threshold = 2 * (sma_short[i] - sma[i]) / np.absolute(bollinger_up[i] - bollinger_down[i]) * parameters[
+                'flip']
 
             if threshold > parameters['Bollinger_top']:
                 buy_armed = True
@@ -80,29 +107,34 @@ def Bollinger_strat(time,
 
             if buy_trigger and not open_put_position:  # open put options
 
-                #strike_price = (candle[i] + bollinger_down[i]) / 2.
+                # strike_price = (candle[i] + bollinger_down[i]) / 2.
 
-                strike_delta = 2*(candle[i] - bollinger_down[i])
+                strike_delta = 2 * (candle[i] - bollinger_down[i])
                 if strike_delta >= 6:
                     strike_delta = 6
 
                 strike_price = candle[i] - strike_delta
 
-
                 new_put = position_class.position(strike_price=strike_price,
                                                   volatility=.001,
-                                                  t=current_time,
+                                                  t=time_to_expiry,
                                                   stock_price=candle[i],
                                                   expiration=60 * 7 + 31,
                                                   stop_loss=parameters['stop_loss'],
-                                                  stop_profit=parameters['profit'])
+                                                  stop_profit=parameters['profit'],
+                                                  option_type=parameters['option_type'],
+                                                  capital=trade_capital)
+
+                used_capital += trade_capital
+                #print(used_capital)
 
                 positions_list.append(new_put)
                 put_buy_locs.append(i)
                 open_put_position = True
 
             if open_put_position:
-                put_price = positions_list[-1].compute_price(t=current_time, stock_price=candle[i])
+                positions_list[-1].compute_price(t=time_to_expiry, stock_price=candle[i])
+                positions_list[-1].compute_value()
                 # print(put_price)
                 # print(put_price)
                 '''
@@ -136,7 +168,7 @@ def Bollinger_strat(time,
                     open_put_position = False
                     # print('closed')
 
-        if (gm_time[3] - 4 == 16) and open_put_position:
+        if (current_minute >= end_of_trading_minute) and open_put_position:
             put_sell_locs.append(i)
             positions_list[-1].close_position(candle[i])
             open_put_position = False
@@ -152,10 +184,18 @@ def Bollinger_strat(time,
         put_sell_price.append(pos.stock_price_at_close)
         put_sell_option_price.append(pos.value_history[-1])
         put_strike_price.append(pos.strike_price)
+        position_value.append(pos.value_history[-1])
 
-    return [np.array(put_buy_locs), np.array(put_buy_price), np.array(put_buy_option_price),
-            np.array(put_sell_locs), np.array(put_sell_price), np.array(put_sell_option_price),
-            np.array(put_strike_price)]
+    position_value.append(initial_capital - used_capital)
+
+    return [np.array(put_buy_locs),
+            np.array(put_buy_price),
+            np.array(put_buy_option_price),
+            np.array(put_sell_locs),
+            np.array(put_sell_price),
+            np.array(put_sell_option_price),
+            np.array(put_strike_price),
+            np.array(position_value)]
 
 
 if __name__ == "__main__":

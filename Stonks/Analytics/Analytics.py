@@ -3,6 +3,7 @@ Calculate various technical signals, bollinger bands, moving averages, etc..
 
 '''
 import time
+import arrow
 import numpy as np
 import h5py
 
@@ -12,19 +13,37 @@ def market_hours(t):
     tradeable = np.zeros_like(t, dtype=np.bool)
     # print(tradeable.shape)
 
-    for i in np.arange(t.shape[0]):
-        gm_time = time.gmtime(t[i] * 1e-3)
-        # print(gm_time[4])
+    start_of_trading_minute = 9 * 60 + 30
+    end_of_trading_minute = 16 * 60
 
-        if gm_time[3] - 4 == 9 and gm_time[4] > 30 and (gm_time[3] - 4 < 10):
+    for i in np.arange(t.shape[0]):
+
+        trade_time = arrow.get(t[i] * 1e-3).to('America/New_York')
+        current_minute = trade_time.hour * 60 + trade_time.minute  # in minutes from open
+
+        if start_of_trading_minute < current_minute < end_of_trading_minute:
             tradeable[i] = True
         else:
             tradeable[i] = False
 
-        if gm_time[3] - 4 >= 10 and (gm_time[3] - 4 < 16):
-            tradeable[i] = True
-
     return tradeable
+
+
+def minute_time(t):
+    # print(t.shape)
+    minute_t = np.zeros_like(t)
+    # print(tradeable.shape)
+
+    start_of_trading_minute = 9 * 60 + 30
+    end_of_trading_minute = 16 * 60
+
+    for i in np.arange(t.shape[0]):
+
+        trade_time = arrow.get(t[i] * 1e-3).to('America/New_York')
+        current_minute = trade_time.hour * 60 + trade_time.minute  # in minutes from open
+        minute_t[i] = current_minute - start_of_trading_minute
+
+    return minute_t
 
 
 def offset_price(data, period=20):
