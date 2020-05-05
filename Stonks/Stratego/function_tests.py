@@ -28,7 +28,8 @@ if __name__ == '__main__':
     strategy_instance = strategy_class.Strategy(symbol='SPY',
                                                 compute_dict=compute_dict,
                                                 parameters=parameters,
-                                                verbose=True)
+                                                verbose=True,
+                                                log_directory='D:/AlgoLogs')
 
     print('###########################################################################################################')
     print()

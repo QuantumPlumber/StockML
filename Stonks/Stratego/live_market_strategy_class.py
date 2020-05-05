@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 import importlib
 import time
 import math
+import inspect
 
 from Stonks.utilities.config import apikey, username, password, secretQ
 # import Stonks.utilities.config
@@ -40,6 +41,12 @@ class Strategy:
         self.verbose = kwargs['verbose']
         self.state = enums.StonksStrategyState.initialized
 
+        #Data logging
+        self.log_root_directory = kwargs['log_directory']
+        self.log_directory = None
+        self.metadata_name = None
+        self.metadata_path = None
+
         # symbol to trade
         self.symbol = kwargs['symbol']
 
@@ -70,6 +77,46 @@ class Strategy:
         self.parameters = kwargs['parameters']
         self.buy_armed = False
         self.sell_armed = False
+
+    def set_up_data_logging(self):
+        '''
+        Create a directory for storing data
+
+        :return:
+        '''
+
+        self.log_directory = self.log_root_directory + '/' + self.today.format('MMDDYY') + '/'
+
+        if not os.path.isdir(self.log_directory):  # Create the directory if it does not exist
+            os.mkdir(self.log_directory)
+        '''
+        self.metadata_name = 'metadata.txt'
+        self.metadata_path = self.log_directory + self.metadata_name
+        if not os.path.isfile(self.metadata_path):
+            self.metadata = open(self.metadata_path, 'a+', buffering=1)
+
+            self.metadata.write('Data logging for strategy class ' + self.today.format('MM-DD-YYYY'))
+            self.metadata.write('\n')
+            print('metadata created')
+        else:
+            # open metadata file for writing
+            self.metadata = open(self.metadata_path, 'a+', buffering=1)
+            print('metadata opened')
+        # self.metadata = metadata
+        '''
+
+    def log_snapshot(self):
+
+        metadata_name = 'metadata' + arrow.now('America/New_York').format('HH_mm_ss') + '.txt'
+        metadata_path = self.log_directory + metadata_name
+        if not os.path.isfile(metadata_path):
+            metadata = open(metadata_path, 'a+', buffering=1)
+
+        attributes = inspect.getmembers(self, lambda a: not (inspect.isroutine(a)))
+        writeable = [a for a in attributes if not (a[0].startswith('__') and a[0].endswith('__'))]
+
+        for element in writeable:
+            metadata.write(str(element) + '\n')
 
     def trading_day_time(self):
         market_open = arrow.now('America/New_York').replace(hour=9, minute=30, second=0)
@@ -354,6 +401,7 @@ class Strategy:
 
                         if self.utility_class.place_order(payload=payload):
                             pos.status = enums.StonksPositionState.open_buy_order
+                            pos.log_snapshot(self.log_directory)
                             continue
 
                     # handle open buy orders
@@ -366,12 +414,15 @@ class Strategy:
                                 if order.is_open:
                                     self.utility_class.delete_order(order.order_id)
                             pos.status = enums.StonksPositionState.needs_buy_order
+                            pos.log_snapshot(self.log_directory)
                             continue
 
                         if not pos.open_order and int(pos.quantity) > 0:
                             pos.status = enums.StonksPositionState.needs_stop_loss_order
+                            pos.log_snapshot(self.log_directory)
                         elif not pos.open_order:
                             pos.status = enums.StonksPositionState.needs_buy_order
+                            pos.log_snapshot(self.log_directory)
 
 
     def build_new_position(self):
@@ -513,6 +564,7 @@ class Strategy:
                         if self.utility_class.place_order(payload=payload):
                             pos.last_stop_loss_update_time = arrow.now('America/New_York')
                             pos.status = enums.StonksPositionState.open_stop_loss_order
+                            pos.log_snapshot(self.log_directory)
                             continue
 
                     if pos.status is enums.StonksPositionState.open_stop_loss_order:
@@ -529,6 +581,7 @@ class Strategy:
                                 if order.is_open:
                                     self.utility_class.delete_order(order.order_id)
                             pos.status = enums.StonksPositionState.needs_close_order
+                            pos.log_snapshot(self.log_directory)
                             continue
 
                         elif not pos.open_order:
@@ -537,6 +590,7 @@ class Strategy:
                             pos.de_activate_position()
                             if pos.position_active:
                                 pos.status = enums.StonksPositionState.needs_close_order
+                                pos.log_snapshot(self.log_directory)
                             continue
 
     def expand_position(self):
@@ -579,13 +633,16 @@ class Strategy:
                                 if order.is_open:
                                     self.utility_class.delete_order(order.order_id)
                             pos.status = enums.StonksPositionState.needs_close_order
+                            pos.log_snapshot(self.log_directory)
                             continue
                         elif not pos.open_order:
                             # de-activate position if the order filled, implicitly this is true if it is no longer active..
                             # Needs an explicit check though. If not, ask for a close order to the position.
                             pos.de_activate_position()
+                            pos.log_snapshot(self.log_directory)
                             if pos.position_active:
                                 pos.status = enums.StonksPositionState.needs_close_order
+                                pos.log_snapshot(self.log_directory)
                             continue
 
     def position_triggers(self):

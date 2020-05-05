@@ -1,5 +1,7 @@
 import numpy as np
 import arrow
+import os
+import inspect
 
 from Stonks import global_enums as enums
 from Stonks.Orders import orders_class as orders
@@ -54,6 +56,19 @@ class Position:
         self.currentDayProfitLossPercentage = None
         self.stop_loss_limit = None
         self.last_stop_loss_update_time = None
+
+    def log_snapshot(self, log_directory):
+
+        metadata_name = self.symbol + arrow.now('America/New_York').format('YYYY-MM-DD_HH_mm_ss') + '.txt'
+        metadata_path = log_directory + metadata_name
+        if not os.path.isfile(metadata_path):
+            metadata = open(metadata_path, 'a+', buffering=1)
+
+        attributes = inspect.getmembers(self, lambda a: not (inspect.isroutine(a)))
+        writeable = [a for a in attributes if not (a[0].startswith('__') and a[0].endswith('__'))]
+
+        for element in writeable:
+            metadata.write(str(element))
 
     def update_price_and_value(self, underlying_quote: dict, quote_data: dict, position_data: dict):
         self.underlying_quote.append(underlying_quote)
