@@ -59,7 +59,7 @@ class Position:
 
     def log_snapshot(self, log_directory):
 
-        metadata_name = self.symbol + arrow.now('America/New_York').format('YYYY-MM-DD_HH_mm_ss') + '.txt'
+        metadata_name = self.symbol + '_' + arrow.now('America/New_York').format('YYYY-MM-DD_HH-mm-ss') + '.txt'
         metadata_path = log_directory + metadata_name
         if not os.path.isfile(metadata_path):
             metadata = open(metadata_path, 'a+', buffering=1)
@@ -68,7 +68,7 @@ class Position:
         writeable = [a for a in attributes if not (a[0].startswith('__') and a[0].endswith('__'))]
 
         for element in writeable:
-            metadata.write(str(element))
+            metadata.write(str(element) + '\n')
 
     def update_price_and_value(self, underlying_quote: dict, quote_data: dict, position_data: dict):
         self.underlying_quote.append(underlying_quote)

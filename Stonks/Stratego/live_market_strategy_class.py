@@ -41,7 +41,7 @@ class Strategy:
         self.verbose = kwargs['verbose']
         self.state = enums.StonksStrategyState.initialized
 
-        #Data logging
+        # Data logging
         self.log_root_directory = kwargs['log_directory']
         self.log_directory = None
         self.metadata_name = None
@@ -89,6 +89,11 @@ class Strategy:
 
         if not os.path.isdir(self.log_directory):  # Create the directory if it does not exist
             os.mkdir(self.log_directory)
+
+        self.position_log_directory = self.log_directory + 'Positions/'
+        if not os.path.isdir(self.position_log_directory):  # Create the directory if it does not exist
+            os.mkdir(self.position_log_directory)
+
         '''
         self.metadata_name = 'metadata.txt'
         self.metadata_path = self.log_directory + self.metadata_name
@@ -157,7 +162,7 @@ class Strategy:
 
         today = arrow.now('America/New_York')
         # TODO: remove shift...
-        today = today.shift(days=-3)
+        # today = today.shift(days=-3)
         yesterday = today.shift(hours=-1)
 
         # build the payload.
@@ -173,7 +178,7 @@ class Strategy:
         price_history = self.utility_class.get_price_history(symbol=self.symbol, payload=payload)
 
         data = pd.DataFrame.from_dict(price_history['candles'])
-        #print(data)
+        # print(data)
         self.analytics.compute_analytics(data=data)
 
     def change_metaparameters(self, **kwargs):
@@ -257,7 +262,22 @@ class Strategy:
                                                     quote_data=self.option_quote,
                                                     position_data=account_position)
 
+                new_position.status = enums.StonksPositionState.open_buy_order
+                new_position.log_snapshot(self.position_log_directory)
+
                 self.positions.append(new_position)
+
+        if self.verbose:
+            pos: positions.Position
+            for pos in self.positions:
+                print('position status:')
+                print(pos.status)
+                print('position target_quantity and quantity:')
+                print([pos.target_quantity, pos.quantity])
+                print('position orders:')
+                print([[order.current_status, order.order_id, order.is_open]
+                       for order in pos.order_list if order.is_open is not False])
+
             '''
             # if there are no positions, create a new position..
             if len(self.positions) == 0:
@@ -318,8 +338,8 @@ class Strategy:
                 self.buy_armed = True
 
             # TODO: revert to previous condition
-            # if self.buy_armed and self.threshold <= self.parameters['Bollinger_top'] and not self.open_position:
-            if True:
+            if self.buy_armed and self.threshold <= self.parameters['Bollinger_top'] and not self.open_position:
+                # if True:
                 strike_delta = self.parameters['price_multiplier'] * (candle[-1] - bollinger_down[-1])
                 if strike_delta >= self.parameters['max_strike_delta']:
                     strike_delta = self.parameters['max_strike_delta']
@@ -334,9 +354,16 @@ class Strategy:
 
                 minimum_investment = self.parameters['minimum_position_size_fraction'] * \
                                      self.initial_account_values['cashAvailableForTrading']
-                expected_current_cash = self.initial_account_values['cashAvailableForTrading'] * \
-                                        (self.seconds_to_close / (self.seconds_from_open + self.seconds_to_close))
-                self.target_capital = self.current_account_values['cashAvailableForTrading'] - expected_current_cash
+                maximum_investment = self.parameters['maximum_position_size_fraction'] * \
+                                     self.initial_account_values['cashAvailableForTrading']
+
+                target_capital_deployment = self.initial_account_values['cashAvailableForTrading'] * \
+                                            (self.seconds_to_close / (self.seconds_from_open + self.seconds_to_close))
+                actual_capital_deployment = self.initial_account_values['cashAvailableForTrading'] - \
+                                            self.current_account_values['cashAvailableForTrading']
+
+                # the target capital takes us as close as possible to the target capital deployment
+                self.target_capital = target_capital_deployment - actual_capital_deployment
 
                 # check to see if we are below threshold for minimum investment
                 if self.target_capital <= minimum_investment:
@@ -345,6 +372,12 @@ class Strategy:
                         self.target_capital = self.current_account_values['cashAvailableForTrading']
                     else:
                         self.target_capital = minimum_investment
+                elif self.target_capital >= maximum_investment:
+                    # check if the maximum investment is greater than available cash.
+                    if self.current_account_values['cashAvailableForTrading'] < maximum_investment:
+                        self.target_capital = self.current_account_values['cashAvailableForTrading']
+                    else:
+                        self.target_capital = maximum_investment
 
                 # build the position
                 self.build_new_position()
@@ -380,9 +413,9 @@ class Strategy:
                         # TODO: revert to market order
                         # build purchase dictionary
                         payload = {enums.OrderPayload.session.value: enums.SessionOptions.NORMAL.value,
-                                   # enums.OrderPayload.orderType.value: enums.OrderTypeOptions.MARKET.value,
-                                   enums.OrderPayload.orderType.value: enums.OrderTypeOptions.LIMIT.value,
-                                   enums.OrderPayload.price.value: limit_price,
+                                   enums.OrderPayload.orderType.value: enums.OrderTypeOptions.MARKET.value,
+                                   # enums.OrderPayload.orderType.value: enums.OrderTypeOptions.LIMIT.value,
+                                   # enums.OrderPayload.price.value: limit_price,
                                    enums.OrderPayload.duration.value: enums.DurationOptions.DAY.value,
                                    enums.OrderPayload.quantity.value: number_of_options,
                                    enums.OrderPayload.orderLegCollection.value: [
@@ -401,7 +434,7 @@ class Strategy:
 
                         if self.utility_class.place_order(payload=payload):
                             pos.status = enums.StonksPositionState.open_buy_order
-                            pos.log_snapshot(self.log_directory)
+                            pos.log_snapshot(self.position_log_directory)
                             continue
 
                     # handle open buy orders
@@ -414,16 +447,17 @@ class Strategy:
                                 if order.is_open:
                                     self.utility_class.delete_order(order.order_id)
                             pos.status = enums.StonksPositionState.needs_buy_order
-                            pos.log_snapshot(self.log_directory)
+                            pos.log_snapshot(self.position_log_directory)
                             continue
 
-                        if not pos.open_order and int(pos.quantity) > 0:
+                        if self.verbose:
+                            print('Position quantity is: {}'.format(int(pos.quantity)))
+                        if not pos.open_order and int(pos.quantity) > 0.:
                             pos.status = enums.StonksPositionState.needs_stop_loss_order
-                            pos.log_snapshot(self.log_directory)
+                            pos.log_snapshot(self.position_log_directory)
                         elif not pos.open_order:
                             pos.status = enums.StonksPositionState.needs_buy_order
-                            pos.log_snapshot(self.log_directory)
-
+                            pos.log_snapshot(self.position_log_directory)
 
     def build_new_position(self):
         '''
@@ -531,7 +565,7 @@ class Strategy:
                         # calculate limit value
                         stop_price_offset = np.max(pos.price_history) * self.parameters['stop_loss']
 
-                        stop_price_offset = math.trunc(stop_price_offset*100.) / 100.
+                        stop_price_offset = math.trunc(stop_price_offset * 100.) / 100.
 
                         print('stop_price_offset is: {}'.format(stop_price_offset))
 
@@ -564,7 +598,7 @@ class Strategy:
                         if self.utility_class.place_order(payload=payload):
                             pos.last_stop_loss_update_time = arrow.now('America/New_York')
                             pos.status = enums.StonksPositionState.open_stop_loss_order
-                            pos.log_snapshot(self.log_directory)
+                            pos.log_snapshot(self.position_log_directory)
                             continue
 
                     if pos.status is enums.StonksPositionState.open_stop_loss_order:
@@ -581,7 +615,7 @@ class Strategy:
                                 if order.is_open:
                                     self.utility_class.delete_order(order.order_id)
                             pos.status = enums.StonksPositionState.needs_close_order
-                            pos.log_snapshot(self.log_directory)
+                            pos.log_snapshot(self.position_log_directory)
                             continue
 
                         elif not pos.open_order:
@@ -590,7 +624,7 @@ class Strategy:
                             pos.de_activate_position()
                             if pos.position_active:
                                 pos.status = enums.StonksPositionState.needs_close_order
-                                pos.log_snapshot(self.log_directory)
+                                pos.log_snapshot(self.position_log_directory)
                             continue
 
     def expand_position(self):
@@ -625,6 +659,39 @@ class Strategy:
                                 if order.is_open:
                                     self.utility_class.delete_order(order.order_id)
 
+
+                        # calculate number of options contracts
+                        number_of_options = int(pos.quantity)
+
+                        print('number_of_options is: {}'.format(number_of_options))
+
+                        # build purchase dictionary
+                        payload = {enums.OrderPayload.session.value: enums.SessionOptions.NORMAL.value,
+                                   # TODO: revert back to stop order
+                                   enums.OrderPayload.orderType.value: enums.OrderTypeOptions.MARKET.value,
+                                   enums.OrderPayload.duration.value: enums.DurationOptions.DAY.value,
+                                   enums.OrderPayload.quantity.value: number_of_options,
+                                   enums.OrderPayload.orderLegCollection.value: [
+                                       {
+                                           enums.OrderLegCollectionDict.instruction.value: enums.InstructionOptions.SELL_TO_CLOSE.value,
+                                           enums.OrderLegCollectionDict.quantity.value: number_of_options,
+                                           enums.OrderLegCollectionDict.instrument.value: {
+                                               enums.InstrumentType.symbol.value: pos.symbol,
+                                               enums.InstrumentType.assetType.value: enums.AssetTypeOptions.OPTION.value
+                                           }
+
+                                       }],
+                                   enums.OrderPayload.orderStrategyType.value: enums.OrderStrategyTypeOptions.SINGLE.value,
+                                   # enums.OrderPayload.orderId.value: np.random.random_integers(low=int(1e8),high=int(1e9),size=1)
+                                   }
+
+                        if self.utility_class.place_order(payload=payload):
+                            pos.last_stop_loss_update_time = arrow.now('America/New_York')
+                            pos.status = enums.StonksPositionState.open_close_order
+                            pos.log_snapshot(self.position_log_directory)
+                            continue
+
+
                     if pos.status is enums.StonksPositionState.open_close_order:
                         if pos.multiple_open_orders:
                             order: orders_class.Order
@@ -633,16 +700,16 @@ class Strategy:
                                 if order.is_open:
                                     self.utility_class.delete_order(order.order_id)
                             pos.status = enums.StonksPositionState.needs_close_order
-                            pos.log_snapshot(self.log_directory)
+                            pos.log_snapshot(self.position_log_directory)
                             continue
                         elif not pos.open_order:
                             # de-activate position if the order filled, implicitly this is true if it is no longer active..
                             # Needs an explicit check though. If not, ask for a close order to the position.
                             pos.de_activate_position()
-                            pos.log_snapshot(self.log_directory)
+                            pos.log_snapshot(self.position_log_directory)
                             if pos.position_active:
                                 pos.status = enums.StonksPositionState.needs_close_order
-                                pos.log_snapshot(self.log_directory)
+                                pos.log_snapshot(self.position_log_directory)
                             continue
 
     def position_triggers(self):
@@ -989,17 +1056,26 @@ class Strategy:
                     if self.utility_class.place_order(payload=payload):
                         pos.status = enums.StonksPositionState.open_close_order
 
-    def implement_strategy(self, **kwargs):
+    def run_strategy(self):
         '''
         Implement the strategy at each timestep
         :param kwargs:
         :return:
         '''
 
+        self.set_up_data_logging()
+        self.log_snapshot()
+        log_start = arrow.now('America/New_York').floor('minute')
+
         new_minute = arrow.now('America/New_York').floor('minute')
         update_minute_clock = True
         while True:
             # trigger on the minute, every minute, when the new candle is available.
+
+            # log the state every 30 min
+            log_timer = arrow.now('America/New_York').floor('minute') - log_start
+            if int(log_timer.seconds) == 60 * 30:
+                self.log_snapshot()
 
             # set the new minute.
             if update_minute_clock:
@@ -1007,7 +1083,8 @@ class Strategy:
                 update_minute_clock = False
 
             # compute the elapsed time and trigger 5 seconds into the new minute.
-            elapsed_time = new_minute - arrow.now('America/New_York')
+            elapsed_time = arrow.now('America/New_York') - new_minute
+            if self.verbose: print(elapsed_time.seconds)
             if elapsed_time.seconds > 65:
                 # implement the algorithm
 

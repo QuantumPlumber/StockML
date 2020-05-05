@@ -17,7 +17,7 @@ importlib.reload(strategy_class)
 
 if __name__ == '__main__':
 
-    parameters = {'Bollinger_top': .0, 'Bollinger_bot': -2.0, 'stop_loss': .2, 'profit': .5, 'price_multiplier': 2,
+    parameters = {'Bollinger_top': .0, 'Bollinger_bot': -2.0, 'stop_loss': .8, 'profit': .5, 'price_multiplier': 2,
                   'max_strike_delta': 6, 'minimum_position_size_fraction': .3, 'stop_trading': .2}
 
     compute_dict = {enums.ComputeKeys.sma: [10, 30],

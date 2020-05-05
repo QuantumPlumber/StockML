@@ -838,7 +838,6 @@ class UtilityClass():
                        np.random.random_integers(low=int(1e8), high=int(1e9), size=1)[0])}
 
         payload = {enums.OrderPayload.session.value: enums.SessionOptions.NORMAL.value,
-                   # TODO: revert back to stop order
                    enums.OrderPayload.orderType.value: enums.OrderTypeOptions.STOP.value,
                    enums.OrderPayload.stopPrice.value: 3.0,
                    enums.OrderPayload.duration.value: enums.DurationOptions.DAY.value,
