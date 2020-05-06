@@ -194,7 +194,8 @@ class Strategy:
         :return:
         '''
 
-        self.get_current_account_values()
+        # must explicitly ensure updated account values in main loop
+        # self.get_current_account_values()
 
         self.percent_lost = 1. - self.current_account_values['liquidationValue'] / self.initial_account_values[
             'liquidationValue']
@@ -233,8 +234,10 @@ class Strategy:
                    'toEnteredTime': arrow.now('America/New_York').format('YYYY-MM-DD')}
         self.account_orders_list = self.utility_class.get_orders(payload=payload)
 
+        # run this for loop in both directions:
+        # first look for account positions that match strategy positions
         for account_position in self.account_positions:
-            position_found = False
+            account_position_found = False
             # iterate through positions
             pos: positions.Position
             for pos in self.positions:
@@ -245,10 +248,10 @@ class Strategy:
                     pos.update_price_and_value(underlying_quote=self.underlying_quote,
                                                quote_data=self.option_quote,
                                                position_data=account_position)
-                    position_found = True
-                # if there are no matching open positions, create a new position..
+                    account_position_found = True
 
-            if not position_found:
+            # if there are no matching open strategy positions, create a new position..
+            if not account_position_found:
                 if self.verbose:
                     print('creating new position from unknown account position..')
                 self.option_quote = self.utility_class.get_quote(symbol=account_position['instrument']['symbol'])
@@ -263,9 +266,30 @@ class Strategy:
                                                     position_data=account_position)
 
                 new_position.status = enums.StonksPositionState.open_buy_order
+
+                #log the position creation for good measure.
                 new_position.log_snapshot(self.position_log_directory)
 
                 self.positions.append(new_position)
+
+        # Then look for strategy positions that don't match account positions
+        pos: positions.Position
+        for pos in self.positions:
+            strategy_position_found = False
+            # iterate through positions
+            for account_position in self.account_positions:
+                # only work on open positions
+                if pos.symbol == account_position['instrument']['symbol'] and pos.position_active:
+                    # if the position is found, great, we already updated it above
+                    strategy_position_found = True
+
+                    # if there are no matching open strategy positions, create a new position..
+            if not strategy_position_found:
+                if self.verbose:
+                    print('No account position found for active strategy position. Setting quantity to zero..')
+
+                # if the position is not found, then teh quantity has been reduced to zero!
+                pos.quantity = 0
 
         if self.verbose:
             pos: positions.Position
@@ -328,7 +352,7 @@ class Strategy:
             candle = self.analytics.compute[enums.ComputeKeys.candle]
             sma = self.analytics.compute[enums.ComputeKeys.sma][0]
             sma_short = self.analytics.compute[enums.ComputeKeys.sma][1]
-            bollinger_up, bollinger_down = self.analytics.compute[enums.ComputeKeys.Bollinger][0]
+            bollinger_down, bollinger_up = self.analytics.compute[enums.ComputeKeys.Bollinger][0]
 
             self.threshold = 2 * (sma_short[-1] - sma[-1]) / np.absolute(bollinger_up[-1] - bollinger_down[-1])
 
@@ -349,7 +373,7 @@ class Strategy:
 
                 #################################### Compute capital for new position ################################
 
-                self.get_current_account_values()
+                # self.get_current_account_values()
                 self.trading_day_time()
 
                 minimum_investment = self.parameters['minimum_position_size_fraction'] * \
@@ -519,6 +543,9 @@ class Strategy:
                                                  quote_data=self.option_quote,
                                                  quantity=int(target_quantity)))
 
+        # log the values for debugging purposes
+        self.log_snapshot()
+
     def hold_position(self):
         if self.state is enums.StonksStrategyState.triggering:
             # trigger add/reduce/sell here
@@ -659,7 +686,6 @@ class Strategy:
                                 if order.is_open:
                                     self.utility_class.delete_order(order.order_id)
 
-
                         # calculate number of options contracts
                         number_of_options = int(pos.quantity)
 
@@ -690,7 +716,6 @@ class Strategy:
                             pos.status = enums.StonksPositionState.open_close_order
                             pos.log_snapshot(self.position_log_directory)
                             continue
-
 
                     if pos.status is enums.StonksPositionState.open_close_order:
                         if pos.multiple_open_orders:
@@ -1072,6 +1097,9 @@ class Strategy:
         while True:
             # trigger on the minute, every minute, when the new candle is available.
 
+            # update time
+            self.trading_day_time()
+
             # log the state every 30 min
             log_timer = arrow.now('America/New_York').floor('minute') - log_start
             if int(log_timer.seconds) == 60 * 30:
@@ -1099,6 +1127,9 @@ class Strategy:
 
                 # set the state to cause triggered behavior
                 self.state = enums.StonksStrategyState.triggering
+
+            # update account information, explicit call here to the account api
+            self.get_current_account_values()
 
             # update positions and orders in those positions to reflect account value
             self.update_positions()
