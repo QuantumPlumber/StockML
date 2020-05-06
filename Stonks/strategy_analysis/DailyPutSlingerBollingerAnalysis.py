@@ -261,7 +261,7 @@ if __name__ == "__main__":
 
     # assume random choice for strategies:
 
-    random_strat = np.random.randint(low=0, high=1, size=all_strats_percent_gain.shape[0])
+    random_strat = np.random.randint(low=0, high=2, size=all_strats_percent_gain.shape[0])
     rand_all_strat = all_strats_percent_gain[np.arange(all_strats_percent_gain.shape[0]), random_strat]
 
     plt.figure(figsize=(10, 10))
