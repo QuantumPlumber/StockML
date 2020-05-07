@@ -298,6 +298,10 @@ class UtilityClass():
                 self.access_accounts()
             except utility_exceptions.AccessError:
                 if self.verbose: print('refresh token has expired..')
+                self.open_browser()
+                self.credential()
+                self.authenticate()
+                self.access_accounts()
 
     def login(self):
         if not self.check_for_refresh_token():
@@ -352,7 +356,9 @@ class UtilityClass():
             return self.account_data
             if self.verbose: print(self.account_data)
         else:
-            raise utility_exceptions.AccessError(url=self.account_endpoint, headers=self.access_header)
+            raise utility_exceptions.AccessError(ErrorCode=self.account_reply.status_code,
+                                                 url=self.accounts_endpoint,
+                                                 headers=self.access_header)
 
     def access_single_account(self, account_id):
         '''
@@ -383,7 +389,9 @@ class UtilityClass():
             self.account_data_dict[str(account_id)] = self.account_reply.json()
             if self.verbose: print(self.account_data)
         else:
-            raise utility_exceptions.AccessError(url=self.account_endpoint, headers=self.access_header)
+            raise utility_exceptions.AccessError(ErrorCode=self.account_reply.status_code,
+                                                 url=self.account_endpoint,
+                                                 headers=self.access_header)
 
     def get_account(self):
         try:
@@ -432,7 +440,9 @@ class UtilityClass():
                 # if no entry, then there are no positions, and return empty list.
                 return []
         else:
-            raise utility_exceptions.AccessError(url=self.account_endpoint, headers=self.access_header)
+            raise utility_exceptions.AccessError(ErrorCode=self.account_reply.status_code,
+                                                 url=self.account_endpoint,
+                                                 headers=self.access_header)
 
     ####################################################################################################################
     ####################################################################################################################

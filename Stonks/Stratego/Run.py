@@ -22,7 +22,7 @@ if __name__ == '__main__':
                   'minimum_position_size_fraction': .2, 'maximum_position_size_fraction': .2,
                   'stop_trading': .2}
 
-    compute_dict = {enums.ComputeKeys.sma: [10, 30],
+    compute_dict = {enums.ComputeKeys.sma: [30, 10],
                     enums.ComputeKeys.derivative: [[10, 10], [30, 30]],
                     enums.ComputeKeys.Bollinger: [[30, 10, 10]]}
 

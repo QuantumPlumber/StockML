@@ -10,6 +10,7 @@ import importlib
 import time
 import math
 import inspect
+import h5py
 
 from Stonks.utilities.config import apikey, username, password, secretQ
 # import Stonks.utilities.config
@@ -94,6 +95,10 @@ class Strategy:
         if not os.path.isdir(self.position_log_directory):  # Create the directory if it does not exist
             os.mkdir(self.position_log_directory)
 
+        self.option_chain_log_directory = self.log_directory + 'Options_Quote/'
+        if not os.path.isdir(self.option_chain_log_directory):  # Create the directory if it does not exist
+            os.mkdir(self.option_chain_log_directory)
+
         '''
         self.metadata_name = 'metadata.txt'
         self.metadata_path = self.log_directory + self.metadata_name
@@ -116,12 +121,54 @@ class Strategy:
         metadata_path = self.log_directory + metadata_name
         if not os.path.isfile(metadata_path):
             metadata = open(metadata_path, 'a+', buffering=1)
+        else:
+            metadata_name = 'metadata_B_' + arrow.now('America/New_York').format('HH_mm_ss') + '.txt'
+            metadata_path = self.log_directory + metadata_name
+            metadata = open(metadata_path, 'a+', buffering=1)
 
         attributes = inspect.getmembers(self, lambda a: not (inspect.isroutine(a)))
         writeable = [a for a in attributes if not (a[0].startswith('__') and a[0].endswith('__'))]
 
         for element in writeable:
             metadata.write(str(element) + '\n')
+
+    def log_options_chain(self):
+
+        def group_creator(nested_dict: dict, group: h5py.Group):
+
+            if type(nested_dict) is dict:
+                # check if item is a dict
+                for key in nested_dict.keys():
+                    if (type(nested_dict[key]) is list) or (type(nested_dict[key]) is dict):
+                        # if item contains a dict or a list, create a subroup for it and recurse
+                        subgroup = group.create_group(key)
+                        group_creator(nested_dict=nested_dict[key], group=subgroup)
+                    else:
+                        # if the item is not a list or a dict, then it must be a value
+                        group.create_dataset(key, dtype=np.dtype(type(nested_dict[key])))
+            elif type(nested_dict) is list:
+                for item in nested_dict:
+                    # if the item is a list, then recurse with the original group for each item in the list
+                    # this has the effect of ignoring lists.
+                    group_creator(nested_dict=item, group=group)
+
+        # TODO: update this function to work
+
+        payload = {'symbol': 'SPY',
+                   'contractType': 'PUT',
+                   'strikeCount': 20,
+                   'includeQuotes': 'TRUE',
+                   'strategy': 'SINGLE',
+                   'fromDate': self.today.shift(days=-1).format('YYYY-MM-DD'),
+                   'toDate': self.options_end_date.shift(days=1).format('YYYY-MM-DD')}
+
+        self.options_chain_quote = self.utility_class.get_options_chain(payload=payload)
+
+        filename = self.option_chain_log_directory + 'Option_chain.hdf5'
+        if not os.path.isfile(filename):
+            self.option_chain_hdf5 = h5py.File(filename, 'a+')
+        else:
+            self.option_chain_hdf5 = h5py.File(filename, 'a+')
 
     def trading_day_time(self):
         market_open = arrow.now('America/New_York').replace(hour=9, minute=30, second=0)
@@ -241,14 +288,15 @@ class Strategy:
             # iterate through positions
             pos: positions.Position
             for pos in self.positions:
-                # only work on open positions
-                if pos.symbol == account_position['instrument']['symbol'] and pos.position_active:
-                    self.option_quote = self.utility_class.get_quote(symbol=pos.symbol)
-                    self.underlying_quote = self.utility_class.get_quote(symbol=pos.underlying_symbol)
-                    pos.update_price_and_value(underlying_quote=self.underlying_quote,
-                                               quote_data=self.option_quote,
-                                               position_data=account_position)
-                    account_position_found = True
+                if pos.position_active:
+                    # only work on open positions
+                    if pos.symbol == account_position['instrument']['symbol']:
+                        self.option_quote = self.utility_class.get_quote(symbol=pos.symbol)
+                        self.underlying_quote = self.utility_class.get_quote(symbol=pos.underlying_symbol)
+                        pos.update_price_and_value(underlying_quote=self.underlying_quote,
+                                                   quote_data=self.option_quote,
+                                                   position_data=account_position)
+                        account_position_found = True
 
             # if there are no matching open strategy positions, create a new position..
             if not account_position_found:
@@ -265,9 +313,11 @@ class Strategy:
                                                     quote_data=self.option_quote,
                                                     position_data=account_position)
 
-                new_position.status = enums.StonksPositionState.open_buy_order
+                new_position.status = enums.StonksPositionState.needs_stop_loss_order
 
-                #log the position creation for good measure.
+                # TODO: this needs a function to determine the state of the newly created function. Mainly is there an open order?
+
+                # log the position creation for good measure.
                 new_position.log_snapshot(self.position_log_directory)
 
                 self.positions.append(new_position)
@@ -275,21 +325,22 @@ class Strategy:
         # Then look for strategy positions that don't match account positions
         pos: positions.Position
         for pos in self.positions:
-            strategy_position_found = False
-            # iterate through positions
-            for account_position in self.account_positions:
-                # only work on open positions
-                if pos.symbol == account_position['instrument']['symbol'] and pos.position_active:
-                    # if the position is found, great, we already updated it above
-                    strategy_position_found = True
+            if pos.position_active:
+                strategy_position_found = False
+                # iterate through positions
+                for account_position in self.account_positions:
+                    # only work on open positions
+                    if pos.symbol == account_position['instrument']['symbol']:
+                        # if the position is found, great, we already updated it above
+                        strategy_position_found = True
 
-                    # if there are no matching open strategy positions, create a new position..
-            if not strategy_position_found:
-                if self.verbose:
-                    print('No account position found for active strategy position. Setting quantity to zero..')
+                        # if there are no matching open strategy positions, create a new position..
+                if not strategy_position_found:
+                    if self.verbose:
+                        print('No account position found for active strategy position. Setting quantity to zero..')
 
-                # if the position is not found, then teh quantity has been reduced to zero!
-                pos.quantity = 0
+                    # if the position is not found, then teh quantity has been reduced to zero!
+                    pos.quantity = 0
 
         if self.verbose:
             pos: positions.Position
@@ -302,37 +353,19 @@ class Strategy:
                 print([[order.current_status, order.order_id, order.is_open]
                        for order in pos.order_list if order.is_open is not False])
 
-            '''
-            # if there are no positions, create a new position..
-            if len(self.positions) == 0:
-                if self.verbose:
-                    print('creating new position from unknown account position..')
-                self.option_quote = self.utility_class.get_quote(symbol=account_position['instrument']['symbol'])
-                self.underlying_quote = self.utility_class.get_quote(
-                    symbol=account_position['instrument']['underlyingSymbol'])
-                new_position = positions.Position(underlying_quote=self.underlying_quote,
-                                                  quote_data=self.option_quote,
-                                                  quantity=None)
-
-                # update new position:
-                new_position.update_price_and_value(underlying_quote=self.underlying_quote,
-                                                    quote_data=self.option_quote,
-                                                    position_data=account_position)
-
-                self.positions.append(new_position)
-            '''
-
         # iterate through positions
+        # order information from the API is always complete
         pos: positions.Position
         for pos in self.positions:
-            # update orders for this positions
-            # first collect all orders related to this position
-            local_order_list = []
-            for order in self.account_orders_list:
-                if order[enums.OrderPayload.orderLegCollection.value][0][
-                    enums.OrderLegCollectionDict.instrument.value]['symbol'] == pos.symbol:
-                    local_order_list.append(order)
-            pos.update_orders(order_payload_list=local_order_list)
+            if pos.position_active:
+                # update orders for this positions
+                # first collect all orders related to this position
+                local_order_list = []
+                for order in self.account_orders_list:
+                    if order[enums.OrderPayload.orderLegCollection.value][0][
+                        enums.OrderLegCollectionDict.instrument.value]['symbol'] == pos.symbol:
+                        local_order_list.append(order)
+                pos.update_orders(order_payload_list=local_order_list)
 
         # iterate through positions and update order status.
         pos: positions.Position
@@ -355,6 +388,7 @@ class Strategy:
             bollinger_down, bollinger_up = self.analytics.compute[enums.ComputeKeys.Bollinger][0]
 
             self.threshold = 2 * (sma_short[-1] - sma[-1]) / np.absolute(bollinger_up[-1] - bollinger_down[-1])
+            if self.verbose: print('Threshold value is: {}'.format(self.threshold))
 
             ########################################### trigger new position ###########################################
 
@@ -364,12 +398,16 @@ class Strategy:
             # TODO: revert to previous condition
             if self.buy_armed and self.threshold <= self.parameters['Bollinger_top'] and not self.open_position:
                 # if True:
-                strike_delta = self.parameters['price_multiplier'] * (candle[-1] - bollinger_down[-1])
-                if strike_delta >= self.parameters['max_strike_delta']:
-                    strike_delta = self.parameters['max_strike_delta']
+
+                self.strike_delta = self.parameters['price_multiplier'] * (candle[-1] - bollinger_down[-1])
+                if self.verbose: print('Target strike delta is: {}'.format(self.strike_delta))
+
+                if self.strike_delta >= self.parameters['max_strike_delta']:
+                    self.strike_delta = self.parameters['max_strike_delta']
 
                 # define strike price
-                self.strike_price = candle[-1] - strike_delta
+                self.strike_price = candle[-1] - self.strike_delta
+                if self.verbose: print('Target strike price is: {}'.format(self.strike_price))
 
                 #################################### Compute capital for new position ################################
 
@@ -523,12 +561,18 @@ class Strategy:
 
         self.best_strike_location = np.nonzero(price_difference == min_price_difference)[0][0]
 
+        self.optoin_price = quote_prices[self.best_strike_location] * 100
+
         # check if this option is affordable
-        if self.target_capital < quote_prices[self.best_strike_location] * 100:
+        if self.target_capital < self.optoin_price:
             # target option is too expensive, do not create it.
+            if self.verbose: print(
+                'target capital of {} could not afford options of price {}'.format(self.target_capital,
+                                                                                   self.optoin_price))
             return
         else:
-            target_quantity = self.target_capital // (quote_prices[self.best_strike_location] * 100)
+            self.target_quantity = self.target_capital // self.optoin_price
+            if self.verbose: print('target quantity for new position is: {}'.format(self.target_quantity))
 
         chosen_option_symbol = \
             self.options_chain_dict[list(self.options_chain_dict.keys())[self.best_strike_location]][0]['symbol']
@@ -541,7 +585,7 @@ class Strategy:
 
         self.positions.append(positions.Position(underlying_quote=self.option_quote,
                                                  quote_data=self.option_quote,
-                                                 quantity=int(target_quantity)))
+                                                 quantity=int(self.target_quantity)))
 
         # log the values for debugging purposes
         self.log_snapshot()
@@ -553,7 +597,7 @@ class Strategy:
             candle = self.analytics.compute[enums.ComputeKeys.candle]
             sma = self.analytics.compute[enums.ComputeKeys.sma][0]
             sma_short = self.analytics.compute[enums.ComputeKeys.sma][1]
-            bollinger_up, bollinger_down = self.analytics.compute[enums.ComputeKeys.Bollinger][0]
+            bollinger_down, bollinger_up = self.analytics.compute[enums.ComputeKeys.Bollinger][0]
 
             self.threshold = 2 * (sma_short[-1] - sma[-1]) / np.absolute(bollinger_up[-1] - bollinger_down[-1])
 
@@ -629,12 +673,6 @@ class Strategy:
                             continue
 
                     if pos.status is enums.StonksPositionState.open_stop_loss_order:
-
-                        # update stoploss every 10 minutes
-                        delta_t = arrow.now('America/New_York') - pos.last_stop_loss_update_time
-                        if delta_t.seconds > 5 * 60:
-                            pos.status = enums.StonksPositionState.needs_stop_loss_order
-
                         if pos.multiple_open_orders:
                             order: orders_class.Order
                             for order in pos.order_list:
@@ -645,7 +683,13 @@ class Strategy:
                             pos.log_snapshot(self.position_log_directory)
                             continue
 
-                        elif not pos.open_order:
+                        if pos.open_order:
+                            # update stoploss every 10 minutes
+                            delta_t = arrow.now('America/New_York') - pos.last_stop_loss_update_time
+                            if delta_t.seconds > 5 * 60:
+                                pos.status = enums.StonksPositionState.needs_stop_loss_order
+
+                        if not pos.open_order:
                             # de-activate position if the order filled, implicitly this is true if it is no longer active..
                             # Needs an explicit check though. If not, ask for a close order to the position.
                             pos.de_activate_position()
