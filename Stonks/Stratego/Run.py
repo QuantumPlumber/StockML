@@ -18,13 +18,14 @@ importlib.reload(strategy_class)
 if __name__ == '__main__':
     parameters = {'Bollinger_top': .0, 'Bollinger_bot': -2.0,
                   'stop_loss': .8, 'profit': .5,
-                  'price_multiplier': 2, 'max_strike_delta': 6,
-                  'minimum_position_size_fraction': .2, 'maximum_position_size_fraction': .2,
+                  'price_multiplier': 2,
+                  'min_strike_delta': 1, 'max_strike_delta': 6,
+                  'minimum_position_size_fraction': .2, 'maximum_position_size_fraction': .3,
                   'stop_trading': .2}
 
     compute_dict = {enums.ComputeKeys.sma: [30, 10],
                     enums.ComputeKeys.derivative: [[10, 10], [30, 30]],
-                    enums.ComputeKeys.Bollinger: [[30, 10, 10]]}
+                    enums.ComputeKeys.Bollinger: [[30, 10, 30]]}
 
     # Must initialize the strategy instance
     strategy_instance = strategy_class.Strategy(symbol='SPY',

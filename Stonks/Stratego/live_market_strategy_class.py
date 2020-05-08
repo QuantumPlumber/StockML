@@ -99,6 +99,12 @@ class Strategy:
         if not os.path.isdir(self.option_chain_log_directory):  # Create the directory if it does not exist
             os.mkdir(self.option_chain_log_directory)
 
+        market_open = arrow.now('America/New_York').replace(hour=9, minute=30, second=0)
+        market_close = arrow.now('America/New_York').replace(hour=16, minute=0, second=0)
+        delta_market = market_close - market_open
+        self.number_of_option_logs = int(delta_market.seconds // 60 + 10)
+        self.current_option_log_number = 0
+
         '''
         self.metadata_name = 'metadata.txt'
         self.metadata_path = self.log_directory + self.metadata_name
@@ -132,10 +138,12 @@ class Strategy:
         for element in writeable:
             metadata.write(str(element) + '\n')
 
+        # sleep to prevent name conflict in file creation.
+        time.sleep(1)
+
     def log_options_chain(self):
 
         def group_creator(nested_dict: dict, group: h5py.Group):
-
             if type(nested_dict) is dict:
                 # check if item is a dict
                 for key in nested_dict.keys():
@@ -145,7 +153,13 @@ class Strategy:
                         group_creator(nested_dict=nested_dict[key], group=subgroup)
                     else:
                         # if the item is not a list or a dict, then it must be a value
-                        group.create_dataset(key, dtype=np.dtype(type(nested_dict[key])))
+                        # if type(nested_dict[key]) is in [np.]
+                        # print(np.dtype(type(nested_dict[key])))
+                        if type(nested_dict[key]) in [str, bool, type(None)]:
+                            pass
+                        else:
+                            data_type = np.float
+                            group.create_dataset(key, shape=[self.number_of_option_logs], dtype=data_type)
             elif type(nested_dict) is list:
                 for item in nested_dict:
                     # if the item is a list, then recurse with the original group for each item in the list
@@ -166,9 +180,40 @@ class Strategy:
 
         filename = self.option_chain_log_directory + 'Option_chain.hdf5'
         if not os.path.isfile(filename):
-            self.option_chain_hdf5 = h5py.File(filename, 'a+')
+            self.option_chain_hdf5 = h5py.File(filename, 'a')
+            group_creator(nested_dict=self.options_chain_quote, group=self.option_chain_hdf5)
         else:
-            self.option_chain_hdf5 = h5py.File(filename, 'a+')
+            self.option_chain_hdf5 = h5py.File(filename, 'w')
+
+        def write_nested_dict(nested_dict: dict, group: h5py.Group):
+            num = 0
+            if type(nested_dict) is dict:
+                # check if item is a dict
+                for key in nested_dict.keys():
+                    if (type(nested_dict[key]) is list) or (type(nested_dict[key]) is dict):
+                        # if item contains a dict or a list, create a subroup for it and recurse
+                        subgroup = group[key]
+                        write_nested_dict(nested_dict=nested_dict[key], group=subgroup)
+                    else:
+                        # if the item is not a list or a dict, then it must be a value
+                        # if type(nested_dict[key]) is in [np.]
+                        # print(np.dtype(type(nested_dict[key])))
+                        if type(nested_dict[key]) in [str, bool, type(None)]:
+                            pass
+                        else:
+                            # print(float(nested_dict[key]))
+                            data_type = np.float
+                            group[key][num] = float(nested_dict[key])
+            elif type(nested_dict) is list:
+                for item in nested_dict:
+                    # if the item is a list, then recurse with the original group for each item in the list
+                    # this has the effect of ignoring lists.
+                    write_nested_dict(nested_dict=item, group=group)
+
+        write_nested_dict(nested_dict=self.options_chain_quote, group=self.option_chain_hdf5)
+
+        self.option_chain_hdf5.close()
+        self.current_option_log_number += 1
 
     def trading_day_time(self):
         market_open = arrow.now('America/New_York').replace(hour=9, minute=30, second=0)
@@ -342,17 +387,6 @@ class Strategy:
                     # if the position is not found, then teh quantity has been reduced to zero!
                     pos.quantity = 0
 
-        if self.verbose:
-            pos: positions.Position
-            for pos in self.positions:
-                print('position status:')
-                print(pos.status)
-                print('position target_quantity and quantity:')
-                print([pos.target_quantity, pos.quantity])
-                print('position orders:')
-                print([[order.current_status, order.order_id, order.is_open]
-                       for order in pos.order_list if order.is_open is not False])
-
         # iterate through positions
         # order information from the API is always complete
         pos: positions.Position
@@ -371,6 +405,19 @@ class Strategy:
         pos: positions.Position
         for pos in self.positions:
             pos.check_order_stati()
+
+        # print out diagnostics of position:
+        if self.verbose:
+            pos: positions.Position
+            for pos in self.positions:
+                if pos.position_active:
+                    print('position status:')
+                    print(pos.status)
+                    print('position target_quantity and quantity:')
+                    print([pos.target_quantity, pos.quantity])
+                    print('position orders:')
+                    print([[order.current_status, order.order_id, order.is_open]
+                           for order in pos.order_list if order.is_open is not False])
 
     def create_position(self):
         if self.state is enums.StonksStrategyState.triggering:
@@ -402,6 +449,8 @@ class Strategy:
                 self.strike_delta = self.parameters['price_multiplier'] * (candle[-1] - bollinger_down[-1])
                 if self.verbose: print('Target strike delta is: {}'.format(self.strike_delta))
 
+                if self.strike_delta <= self.parameters['min_strike_delta']:
+                    self.strike_delta = self.parameters['min_strike_delta']
                 if self.strike_delta >= self.parameters['max_strike_delta']:
                     self.strike_delta = self.parameters['max_strike_delta']
 
@@ -419,13 +468,14 @@ class Strategy:
                 maximum_investment = self.parameters['maximum_position_size_fraction'] * \
                                      self.initial_account_values['cashAvailableForTrading']
 
-                target_capital_deployment = self.initial_account_values['cashAvailableForTrading'] * \
-                                            (self.seconds_to_close / (self.seconds_from_open + self.seconds_to_close))
-                actual_capital_deployment = self.initial_account_values['cashAvailableForTrading'] - \
-                                            self.current_account_values['cashAvailableForTrading']
+                self.target_capital_deployment = self.initial_account_values['cashAvailableForTrading'] * \
+                                                 (self.seconds_to_close / (
+                                                             self.seconds_from_open + self.seconds_to_close))
+                self.actual_capital_deployment = self.initial_account_values['cashAvailableForTrading'] - \
+                                                 self.current_account_values['cashAvailableForTrading']
 
                 # the target capital takes us as close as possible to the target capital deployment
-                self.target_capital = target_capital_deployment - actual_capital_deployment
+                self.target_capital = self.target_capital_deployment - self.actual_capital_deployment
 
                 # check to see if we are below threshold for minimum investment
                 if self.target_capital <= minimum_investment:
@@ -483,7 +533,7 @@ class Strategy:
                                    enums.OrderPayload.orderLegCollection.value: [
                                        {
                                            enums.OrderLegCollectionDict.instruction.value: enums.InstructionOptions.BUY_TO_OPEN.value,
-                                           enums.OrderLegCollectionDict.quantity.value: 1,
+                                           enums.OrderLegCollectionDict.quantity.value: number_of_options,
                                            enums.OrderLegCollectionDict.instrument.value: {
                                                enums.InstrumentType.symbol.value: pos.symbol,
                                                enums.InstrumentType.assetType.value: enums.AssetTypeOptions.OPTION.value
@@ -498,6 +548,8 @@ class Strategy:
                             pos.status = enums.StonksPositionState.open_buy_order
                             pos.log_snapshot(self.position_log_directory)
                             continue
+
+                        continue
 
                     # handle open buy orders
                     if pos.status is enums.StonksPositionState.open_buy_order:
@@ -520,6 +572,8 @@ class Strategy:
                         elif not pos.open_order:
                             pos.status = enums.StonksPositionState.needs_buy_order
                             pos.log_snapshot(self.position_log_directory)
+
+                        continue
 
     def build_new_position(self):
         '''
@@ -589,6 +643,7 @@ class Strategy:
 
         # log the values for debugging purposes
         self.log_snapshot()
+        time.sleep(.5)
 
     def hold_position(self):
         if self.state is enums.StonksStrategyState.triggering:
@@ -672,6 +727,8 @@ class Strategy:
                             pos.log_snapshot(self.position_log_directory)
                             continue
 
+                        continue
+
                     if pos.status is enums.StonksPositionState.open_stop_loss_order:
                         if pos.multiple_open_orders:
                             order: orders_class.Order
@@ -688,6 +745,7 @@ class Strategy:
                             delta_t = arrow.now('America/New_York') - pos.last_stop_loss_update_time
                             if delta_t.seconds > 5 * 60:
                                 pos.status = enums.StonksPositionState.needs_stop_loss_order
+                            continue
 
                         if not pos.open_order:
                             # de-activate position if the order filled, implicitly this is true if it is no longer active..
@@ -697,6 +755,8 @@ class Strategy:
                                 pos.status = enums.StonksPositionState.needs_close_order
                                 pos.log_snapshot(self.position_log_directory)
                             continue
+
+                        continue
 
     def expand_position(self):
         if self.state is enums.StonksStrategyState.triggering:
@@ -1156,7 +1216,7 @@ class Strategy:
 
             # compute the elapsed time and trigger 5 seconds into the new minute.
             elapsed_time = arrow.now('America/New_York') - new_minute
-            if self.verbose: print(elapsed_time.seconds)
+            if self.verbose: print('Elapsed time since last trigger minute: {}'.format(elapsed_time.seconds))
             if elapsed_time.seconds > 65:
                 # implement the algorithm
 
@@ -1168,6 +1228,9 @@ class Strategy:
 
                 # update the analysis
                 self.update_analytics()
+
+                # record options quote for posterity
+                # self.log_options_chain()
 
                 # set the state to cause triggered behavior
                 self.state = enums.StonksStrategyState.triggering
@@ -1193,4 +1256,4 @@ class Strategy:
             # set the state to resolve processing
             self.state = enums.StonksStrategyState.processing
             # Wait to redo loop every 20 seconds
-            time.sleep(20)
+            time.sleep(10)

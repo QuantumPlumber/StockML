@@ -339,6 +339,8 @@ class UtilityClass():
         :return:
         '''
 
+        self.account_access_attempt = False
+
         try:
             self.access_header
         except AttributeError:
@@ -351,6 +353,16 @@ class UtilityClass():
         # POST data to get access token
         self.account_reply = requests.get(url=self.accounts_endpoint, headers=self.access_header)
         if self.account_reply.status_code == utility_exceptions.AccessSuccess.account_success.value:
+            self.account_data = self.account_reply.json()
+            self.account_id = self.account_data[0]['securitiesAccount']['accountId']
+            return self.account_data
+            if self.verbose: print(self.account_data)
+        elif self.account_reply.status_code == utility_exceptions.AccessSuccess.account_partial_success.value \
+                and not self.account_access_attempt:
+            #wait 5 seconds and then attempt again.
+            time.sleep(5)
+            if self.verbose: print('Account data partial success, calling again..')
+            self.account_reply = requests.get(url=self.accounts_endpoint, headers=self.access_header)
             self.account_data = self.account_reply.json()
             self.account_id = self.account_data[0]['securitiesAccount']['accountId']
             return self.account_data
