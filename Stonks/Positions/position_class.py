@@ -1,5 +1,6 @@
 import numpy as np
 from enum import Enum
+import matplotlib.pyplot as plt
 
 
 class OptionType(Enum):
@@ -26,7 +27,8 @@ class position():
         self.strike_price = strike_price
 
         self.n_binomial = 50
-        self.volatility = volatility
+        self.volatility = volatility / 100.
+        self.volatility_time_period = expiration*9
 
         self.r = 0
         self.q = 0
@@ -54,7 +56,7 @@ class position():
         ''' only call after compute price'''
         self.capital_history.append(capital)
         self.price_at_buy_or_add.append(self.price_history[-1])
-        self.quantity_at_buy_or_add.append(capital/self.price_history[-1])
+        self.quantity_at_buy_or_add.append(capital / self.price_history[-1])
 
         total_quantity = np.sum(self.quantity_at_buy_or_add)
         total_capital = np.sum(np.array(self.capital_history))
@@ -62,7 +64,6 @@ class position():
         loc_average_price = total_capital / total_quantity
 
         self.average_value.append(loc_average_price)
-
 
     def compute_price(self, t, stock_price):
         '''
@@ -74,7 +75,10 @@ class position():
         delta_t = (self.expiration - t) / self.n_binomial
         self.delta_t = delta_t
 
-        up = np.exp(self.volatility * np.sqrt(delta_t))
+        num_delta_t = self.volatility_time_period / delta_t
+        local_volatility = self.volatility / np.sqrt(num_delta_t)
+
+        up = np.exp(local_volatility * np.sqrt(delta_t))
         self.up = up
         down = 1 / up
         self.down = down
@@ -136,13 +140,30 @@ class position():
 
 if __name__ == "__main__":
     strike = 260
-    volatitity = .001
+    stock_price = 260
+    volatitity = 2.4
     end_of_day = 60 * 6 + 30
-    put_option = position(expiration=end_of_day, strike_price=strike, volatility=volatitity)
+    put_option = position(strike_price=strike,
+                          volatility=volatitity,
+                          t=0,
+                          stock_price=stock_price,
+                          expiration=2*end_of_day,
+                          stop_loss=.8,
+                          stop_profit=2.0,
+                          option_type=OptionType.PUT,
+                          capital=1)
 
     # put_option.compute_price(t=0, stock_price=260)
 
-    for t in np.arange(0, end_of_day, 10):
-        put_option.compute_price(t=t, stock_price=250)
+    time_step = 10
+    compute_times = np.linspace(0, end_of_day, num=12)
+    stock_prices = np.arange(start=stock_price - 5, stop=stock_price + 5 + 2, step=1)
+    price_history = np.zeros(shape=(stock_prices[0:-1].shape[0], compute_times[0:-1].shape[0]))
+    for i, pri in enumerate(stock_prices[0:-1]):
+        for j, t in enumerate(compute_times[0:-1]):
+            price_history[i, j] = put_option.compute_price(t=t, stock_price=pri)
 
-    print(put_option.price_history)
+    tt, pp = np.meshgrid(compute_times, stock_prices)
+    plt.figure(figsize=(10, 10))
+    plt.pcolormesh(tt, pp, price_history)
+    plt.colorbar()
