@@ -21,7 +21,7 @@ def market_hours(t):
         trade_time = arrow.get(t[i] * 1e-3).to('America/New_York')
         current_minute = trade_time.hour * 60 + trade_time.minute  # in minutes from open
 
-        if start_of_trading_minute < current_minute < end_of_trading_minute:
+        if start_of_trading_minute <= current_minute <= end_of_trading_minute:
             tradeable[i] = True
         else:
             tradeable[i] = False

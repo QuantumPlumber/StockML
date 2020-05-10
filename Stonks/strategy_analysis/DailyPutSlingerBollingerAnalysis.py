@@ -71,6 +71,7 @@ def slinger(ax, datafile, ticker, parameters):
         performance_list.append(put_percent_avg)
 
     performance_array = np.array(performance_list)
+    print('performance_array: {}'.format(performance_array))
     best_perf_loc = np.where(performance_array == performance_array.max())[0][0]
 
     # hack the parameters to be the best choice for the rest of the function, this keeps recoding to a minimum:
@@ -115,7 +116,7 @@ def slinger(ax, datafile, ticker, parameters):
     account_value = np.sum(position_value)
     print('account value ate EOD: {}'.format(account_value))
 
-    #put_percent_avg = np.sum(put_percent) / put_percent.shape[0]
+    # put_percent_avg = np.sum(put_percent) / put_percent.shape[0]
 
     put_percent_avg = np.sum(account_value) - 1
     print('average option % gain: {}'.format(put_percent_avg))
@@ -135,7 +136,7 @@ def slinger(ax, datafile, ticker, parameters):
     Bollinger_oscillator = 2 * (sma_short - sma) / np.absolute(sma_high_bollinger - sma_low_bollinger)
 
     minute_time = Analytics.minute_time(time)
-    #print(minute_time)
+    # print(minute_time)
 
     '''
     ax[0].plot(time[focus_top:focus_bot], candle_rescaled, label='candle')
@@ -216,13 +217,18 @@ if __name__ == "__main__":
                        'stop_loss': .8,
                        'profit': .8,
                        'flip': 1,
-                       'option_type': position_class.OptionType.PUT})
+                       'option_type': position_class.OptionType.PUT,
+                       'VIX': 24}
+                      )
+
     parameters.append({'Bollinger_top': .0,
                        'Bollinger_bot': -2.0,
                        'stop_loss': .8,
-                       'profit': .8,
+                       'profit': .9,
                        'flip': -1,
-                       'option_type': position_class.OptionType.CALL})
+                       'option_type': position_class.OptionType.CALL,
+                       'VIX': 24}
+                      )
 
     days_in_directory, unique_dates = DailyGenerator.days_in_directory(filedirectory='D:/StockData/', ticker=ticker)
     print('days in directory: {}'.format(days_in_directory))
@@ -230,9 +236,15 @@ if __name__ == "__main__":
 
     daily_percent_gain = []
     all_strats_percent_gain = []
-    for ax_row, [datafile, date] in zip(axs,
+    for ax_row, [datafile, date, VIX] in zip(axs,
                                         DailyGenerator.data_file_generator(filedirectory=filedirectory, ticker=ticker)):
         print('Date: {}'.format(date))
+
+        for param in parameters:
+            param['VIX'] = VIX
+
+        print('VIX: {}'.format(VIX))
+
         start_time = time.perf_counter()
         put_percent_avg, performance_array = slinger(ax=ax_row, datafile=datafile, ticker=ticker, parameters=parameters)
         daily_percent_gain.append(put_percent_avg)

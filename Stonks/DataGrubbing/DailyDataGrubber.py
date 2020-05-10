@@ -45,19 +45,22 @@ def grub(symbol='GOOG', startdate=1581921000000):
 
 
 def market_hours(t):
-    tradeable = np.zeros_like(t)
+    # print(t.shape)
+    tradeable = np.zeros_like(t, dtype=np.bool)
+    # print(tradeable.shape)
 
-    for i in np.arange(tradeable.shape[0]):
-        gm_time = time.gmtime(t[i] * 1e-3)
-        #print(gm_time[4])
+    start_of_trading_minute = 9 * 60 + 30
+    end_of_trading_minute = 16 * 60
 
-        if gm_time[3] - 4 == 9 and gm_time[4] > 30 and (gm_time[3] - 4 < 10):
+    for i in np.arange(t.shape[0]):
+
+        trade_time = arrow.get(t[i] * 1e-3).to('America/New_York')
+        current_minute = trade_time.hour * 60 + trade_time.minute  # in minutes from open
+
+        if start_of_trading_minute <= current_minute <= end_of_trading_minute:
             tradeable[i] = True
         else:
             tradeable[i] = False
-
-        if gm_time[3] - 4 >= 10 and (gm_time[3] - 4 < 16):
-            tradeable[i] = True
 
     return tradeable
 
@@ -93,6 +96,8 @@ if __name__ == '__main__':
 
     grub_targets = SandPfromWiki.get_SandP500()
     grub_targets.append('SPY')
+    grub_targets.append('VIX')
+    grub_targets.append('VIX9D')
 
     '''File Handling'''
     # filename = '../StockData/S&P_500_{}'.format(str(datetime.date.today() - datetime.timedelta(days=lookback_days)))

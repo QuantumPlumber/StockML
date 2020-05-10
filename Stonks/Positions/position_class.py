@@ -19,16 +19,17 @@ class position():
                  stop_loss=.8,
                  stop_profit=2.0,
                  option_type=OptionType.PUT,
-                 capital=1):
+                 capital=1,
+                 n_binomial=100):
 
         self.option_type = option_type
 
         self.expiration = expiration
         self.strike_price = strike_price
 
-        self.n_binomial = 50
+        self.n_binomial = n_binomial
         self.volatility = volatility / 100.
-        self.volatility_time_period = expiration*9
+        self.volatility_time_period = 9 * 24 * 60
 
         self.r = 0
         self.q = 0
@@ -72,18 +73,24 @@ class position():
         :param stock_price: current price of stock
         :return: returns the
         '''
-        delta_t = (self.expiration - t) / self.n_binomial
+        delta_t = (self.expiration - t) / self.n_binomial  # units of minutes
+        # print(delta_t)
         self.delta_t = delta_t
 
-        num_delta_t = self.volatility_time_period / delta_t
-        local_volatility = self.volatility / np.sqrt(num_delta_t)
+        # convert volatility to local timestep
+        volatility_rescale = self.volatility_time_period / delta_t  # compute number to steps in volatility interval
+        # print(volatility_rescale)
+        local_volatility = self.volatility / np.sqrt(volatility_rescale) / 8
+        # print(local_volatility)
 
         up = np.exp(local_volatility * np.sqrt(delta_t))
+        # print('up: {}'.format(up))
         self.up = up
         down = 1 / up
         self.down = down
 
         p = (np.exp((self.r - self.q) * delta_t) - down) / (up - down)
+        # print('p: {}'.format(p))
         q = 1 - p
 
         # define initial conditions
@@ -108,17 +115,25 @@ class position():
             elif self.option_type is OptionType.CALL:
                 exercise = price_tree - self.strike_price
             binomial_tree[binomial_tree <= exercise] = exercise[binomial_tree <= exercise]
+            binomial_tree[binomial_tree <= 0] = 0
 
             # print(binomial_tree)
 
+        # print(binomial_tree)
         option_price = binomial_tree[0]
+        '''
+        if np.isnan(option_price):
+            option_price = .1
+        '''
+        if option_price <= .1:
+            option_price = .1
 
         self.price_history.append(option_price)
 
         return option_price
 
     def compute_value(self):
-        value = np.sum(self.quantity_at_buy_or_add) * self.price_history[-1]
+        value = np.sum(np.array(self.quantity_at_buy_or_add)) * self.price_history[-1]
 
         self.value_history.append(value)
 
@@ -127,8 +142,10 @@ class position():
             return True
 
     def check_stop_profit(self):
-        if self.value_history[-1] <= self.stop_profit * np.max(np.array(self.value_history)):
-            return True
+        if self.value_history[-1] >= self.value_history[0]:
+            if self.value_history[-1] <= self.stop_profit * np.max(np.array(self.value_history)):
+            #if self.value_history[-1] >= self.stop_profit * np.array(self.value_history)[0]:
+                return True
 
     def percent_gain(self):
         return self.value_history[-1] / self.average_value[-1]
@@ -139,15 +156,16 @@ class position():
 
 
 if __name__ == "__main__":
+
     strike = 260
     stock_price = 260
-    volatitity = 2.4
+    volatitity = 111.
     end_of_day = 60 * 6 + 30
     put_option = position(strike_price=strike,
                           volatility=volatitity,
                           t=0,
                           stock_price=stock_price,
-                          expiration=2*end_of_day,
+                          expiration=end_of_day,
                           stop_loss=.8,
                           stop_profit=2.0,
                           option_type=OptionType.PUT,
@@ -156,8 +174,8 @@ if __name__ == "__main__":
     # put_option.compute_price(t=0, stock_price=260)
 
     time_step = 10
-    compute_times = np.linspace(0, end_of_day, num=12)
-    stock_prices = np.arange(start=stock_price - 5, stop=stock_price + 5 + 2, step=1)
+    compute_times = np.linspace(0, end_of_day, num=50)
+    stock_prices = np.linspace(start=stock_price - 5, stop=stock_price + 5 + 2, num=50)
     price_history = np.zeros(shape=(stock_prices[0:-1].shape[0], compute_times[0:-1].shape[0]))
     for i, pri in enumerate(stock_prices[0:-1]):
         for j, t in enumerate(compute_times[0:-1]):
@@ -166,4 +184,38 @@ if __name__ == "__main__":
     tt, pp = np.meshgrid(compute_times, stock_prices)
     plt.figure(figsize=(10, 10))
     plt.pcolormesh(tt, pp, price_history)
+    #plt.pcolormesh(tt, pp, price_history - price_history[stock_prices.shape[0] // 2, 0])
     plt.colorbar()
+
+    '''
+    strike = 260
+    stock_price = 260
+    volatitity = 24.
+    end_of_day = 60 * 6 + 30
+
+    time_step = 10
+    compute_times = np.linspace(0, end_of_day-1, num=10)
+    binomial_steps = np.arange(start=50, stop=450, step=100)
+    price_history = np.zeros_like(compute_times)
+    convergence = []
+    for i, binom in enumerate(binomial_steps):
+        put_option = position(strike_price=strike,
+                              volatility=volatitity,
+                              t=0,
+                              stock_price=stock_price,
+                              expiration=end_of_day,
+                              stop_loss=.8,
+                              stop_profit=2.0,
+                              option_type=OptionType.PUT,
+                              capital=1,
+                              n_binomial=binom)
+
+        for j, t in enumerate(compute_times):
+            price_history[j] = put_option.compute_price(t=t, stock_price=stock_price)
+
+        convergence.append(price_history)
+
+    plt.figure(figsize=(10, 10))
+    for conv in convergence:
+        plt.plot(compute_times, conv)
+    '''

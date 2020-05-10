@@ -60,7 +60,8 @@ def Bollinger_strat(time,
     for i in np.arange(sma.shape[0]):
         trade_time = arrow.get(time[i] * 1e-3).to('America/New_York')
         current_minute = trade_time.hour * 60 + trade_time.minute  # in minutes from open
-        time_to_expiry = end_of_trading_minute - current_minute
+        time_from_open = current_minute - start_of_trading_minute
+        #print(time_to_expiry)
 
         working_capital = initial_capital * (current_minute - start_of_trading_minute) / (
                 end_of_trading_minute - start_of_trading_minute)
@@ -73,7 +74,7 @@ def Bollinger_strat(time,
         if start_of_trading_minute < current_minute < end_of_trading_minute:
             # current_time = ((gm_time[3] - 4) * 60 + gm_time[4]) - (9 * 60)  # in minutes from open
 
-            #print(used_capital)
+            # print(used_capital)
 
             ############### Toggle buy ###########################
 
@@ -113,27 +114,30 @@ def Bollinger_strat(time,
                 if strike_delta >= 6:
                     strike_delta = 6
 
-                strike_price = candle[i] - strike_delta
+                #strike_price = candle[i] - strike_delta * parameters['flip']
+                strike_price = (candle[i]) // 1
 
+                #print('trade_capital: {}'.format(trade_capital))
                 new_put = position_class.position(strike_price=strike_price,
-                                                  volatility=.001,
-                                                  t=time_to_expiry,
+                                                  # volatility=.001,
+                                                  volatility=parameters['VIX'],
+                                                  t=time_from_open,
                                                   stock_price=candle[i],
-                                                  expiration=60 * 7 + 31,
+                                                  expiration=60 * (6) + 30,
                                                   stop_loss=parameters['stop_loss'],
                                                   stop_profit=parameters['profit'],
                                                   option_type=parameters['option_type'],
                                                   capital=trade_capital)
 
                 used_capital += trade_capital
-                #print(used_capital)
+                #print('used_capital: {}'.format(used_capital))
 
                 positions_list.append(new_put)
                 put_buy_locs.append(i)
                 open_put_position = True
 
             if open_put_position:
-                positions_list[-1].compute_price(t=time_to_expiry, stock_price=candle[i])
+                positions_list[-1].compute_price(t=time_from_open, stock_price=candle[i])
                 positions_list[-1].compute_value()
                 # print(put_price)
                 # print(put_price)
@@ -167,12 +171,14 @@ def Bollinger_strat(time,
                     # print(put_price)
                     open_put_position = False
                     # print('closed')
+                    # print(positions_list[-1].quantity_at_buy_or_add)
 
         if (current_minute >= end_of_trading_minute) and open_put_position:
             put_sell_locs.append(i)
             positions_list[-1].close_position(candle[i])
             open_put_position = False
-            print('closed')
+            #print('closed')
+            #print(positions_list[-1].quantity_at_buy_or_add)
 
     print('number of positions: {}'.format(len(positions_list)))
 
@@ -201,8 +207,8 @@ def Bollinger_strat(time,
 if __name__ == "__main__":
 
     '''File Handling'''
-    filedirectory = '../StockData/'
-    filename = 'S&P_500_2020-03-16'
+    filedirectory = 'D:/StockData/'
+    filename = 'S&P_500_2020-05-08'
     filepath = filedirectory + filename
     if os.path.exists(filepath):
         datafile = h5py.File(filepath)
@@ -218,27 +224,39 @@ if __name__ == "__main__":
     data_low = datafile[group_choice]['low'][...]
     datafile.close()
 
-    data = Analytics.candle_avg(open=data_open, high=data_high, low=data_low)
+    tradeable = Analytics.market_hours(t=time)
+    print(np.sum(tradeable))
+    candle = Analytics.candle_avg(open=data_open, high=data_high, low=data_low)
     candle_low_bollinger, candle_high_bollinger = Analytics.candle_bollinger_bands(open=data_open,
                                                                                    high=data_high,
                                                                                    low=data_low,
-                                                                                   average=data,
+                                                                                   average=candle,
                                                                                    period=30)
-    period = 60
-    sma = Analytics.moving_average(data=data, period=period)
-    # sma = Analytics.exp_moving_average(data=data, alpha=.1, period=30)
-    sma_low_bollinger, sma_high_bollinger = Analytics.bollinger_bands(data=data, average=sma)
-    sma_d = Analytics.derivative(data, period=period)
-    sma_dd = Analytics.second_derivative(data, period=period)
+    period = 30
+    sma = Analytics.moving_average(data=candle, period=period)
+    sma_short = Analytics.moving_average(data=candle, period=period // 3)
+    sma_low_bollinger, sma_high_bollinger = Analytics.bollinger_bands(data=sma_short, average=sma)
+    sma_d = Analytics.derivative(sma, period=period // 6)
+    # sma_d = Analytics.moving_average(sma_d, period=period // 6)
+    sma_dd = Analytics.second_derivative(sma, period=period)
+
+    parameter = {'Bollinger_top': .0,
+                  'Bollinger_bot': -2.0,
+                  'stop_loss': .8,
+                  'profit': .8,
+                  'flip': 1,
+                  'option_type': position_class.OptionType.CALL}
 
     results_list = Bollinger_strat(time=time,
                                    sma=sma,
+                                   sma_short=sma_short,
+                                   bollinger_up=sma_high_bollinger,
+                                   bollinger_down=sma_low_bollinger,
                                    sma_d=sma_d,
-                                   candle=data,
-                                   candle_high=candle_low_bollinger,
-                                   candle_low=candle_high_bollinger,
-                                   stop_loss=.8,
-                                   profit=1.2)
+                                   candle=candle,
+                                   candle_high=candle_high_bollinger,
+                                   candle_low=candle_low_bollinger,
+                                   parameters=parameter)
 
     put_buy_locs = results_list[0]
     put_buy_price = results_list[1]
@@ -264,82 +282,81 @@ if __name__ == "__main__":
     '''
 
     print('number of put purchases: {}'.format(put_buy_option_price.shape[0]))
-    put_profits = (put_buy_option_price - put_sell_option_price)
-    print('put_profits: {}'.format(np.sum(put_profits)))
-    put_percent = (put_buy_option_price - put_sell_option_price) / put_buy_option_price
-    print('put_percent: {}'.format(np.sum(put_percent) / put_percent.shape[0]))
 
-    plt.figure(figsize=(20, 10))
-    plt.hist(put_profits, bins=100)
+    print('put buy option price: {}'.format(put_buy_option_price))
+    print('put sell option price: {}'.format(put_sell_option_price))
 
-    plt.figure(figsize=(20, 10))
-    plt.plot(put_profits)
+    put_profits = (put_sell_option_price - put_buy_option_price)
+    print('put profits: {}'.format(put_profits))
+    print('total put profits: {}'.format(np.sum(put_profits)))
 
-    focus_top = time.shape[0] - 60 * 48
-    focus_bot = time.shape[0] + 1
+    put_percent = (put_sell_option_price - put_buy_option_price) / put_buy_option_price
+    print('put percents: {}'.format(put_percent))
+    print('total put percent: {}'.format(np.sum(put_percent) / put_percent.shape[0]))
+
     focus_top = 0
     focus_bot = time.shape[0] + 1
 
-    #################################################################################
-    plt.figure(figsize=(20, 10))
-    plt.suptitle('profitable trades')
-    plt.plot(time[focus_top:focus_bot], data[focus_top:focus_bot], '.')
-    plt.plot(time[focus_top:focus_bot], sma[focus_top:focus_bot])
-    plt.plot(time[focus_top:focus_bot], sma_low_bollinger[focus_top:focus_bot])
-    plt.plot(time[focus_top:focus_bot], sma_high_bollinger[focus_top:focus_bot])
-    plt.plot(time[focus_top:focus_bot], candle_low_bollinger[focus_top:focus_bot])
-    plt.plot(time[focus_top:focus_bot], candle_high_bollinger[focus_top:focus_bot])
+    candle_rescaled = candle - np.sum(candle) / sma.shape[0]
+    candle_rescaled = candle_rescaled / np.abs(candle_rescaled).max()
+    sma_rescaled = sma - np.sum(sma) / sma.shape[0]
+    sma_rescaled = sma_rescaled / np.abs(sma_rescaled).max()
+    Bollinger_oscillator = 2 * (sma_short - sma) / np.absolute(sma_high_bollinger - sma_low_bollinger)
 
-    profit_put_buy_locs = put_buy_locs[put_profits > 0]
+    minute_time = Analytics.minute_time(time)
+    print('put buy locs: {}'.format(minute_time[put_buy_locs]))
+    print('put sell locs: {}'.format(minute_time[put_sell_locs]))
+    #print(minute_time)
+
+    #################################################################################
+    # plt.figure(figsize=(20, 10))
+    # plt.suptitle('profitable trades')
+    # ax[0].plot(time[tradeable], data_volume[tradeable], '.')
+
+    fig, ax = plt.subplots(nrows=1, ncols=2, sharex=False, figsize=(20, 8))
+
+    ax_twin = ax[0].twinx()
+    ax_twin.plot(minute_time[tradeable], Bollinger_oscillator[tradeable])
+    ax_twin.plot(minute_time[tradeable], np.ones_like(minute_time[tradeable]) * parameter['Bollinger_top'], color='k')
+    ax_twin.plot(minute_time[tradeable], np.ones_like(minute_time[tradeable]) * parameter['Bollinger_bot'], color='k')
+
+    ax[0].plot(minute_time[tradeable], candle[tradeable], '.')
+    ax[0].plot(minute_time[tradeable], sma[tradeable])
+    ax[0].plot(minute_time[tradeable], sma_low_bollinger[tradeable])
+    ax[0].plot(minute_time[tradeable], sma_high_bollinger[tradeable])
+    ax[0].plot(minute_time[tradeable], candle_low_bollinger[tradeable])
+    ax[0].plot(minute_time[tradeable], candle_high_bollinger[tradeable])
+
+    profit_put_buy_locs = put_buy_locs[put_profits >= 0]
     put_cut = profit_put_buy_locs[profit_put_buy_locs > focus_top]
-    plt.plot(time[put_cut], data[put_cut], '>', color='r')
-    # plt.plot(put_cut - focus_top, sma[put_cut], '>', color='r')
-    sma_d_buy = sma_dd[put_cut]
+    ax[0].plot(minute_time[put_cut], candle[put_cut], '>', color='k')
 
-    profit_put_sell_locs = put_sell_locs[put_profits > 0]
+    profit_put_sell_locs = put_sell_locs[put_profits >= 0]
     put_cut = profit_put_sell_locs[profit_put_sell_locs > focus_top]
-    plt.plot(time[put_cut], data[put_cut], '<', color='g')
-    # plt.plot(put_cut - focus_top, sma[put_cut], '<', color='g')
-
-    plt.figure(figsize=(20, 10))
-    plt.plot(time[put_cut], sma_d_buy, '.')
+    ax[0].plot(minute_time[put_cut], candle[put_cut], '<', color='k')
 
     #################################################################################
-    plt.figure(figsize=(20, 10))
-    plt.suptitle('loss trades')
-    plt.plot(time[focus_top:focus_bot], data[focus_top:focus_bot], '.')
-    plt.plot(time[focus_top:focus_bot], sma[focus_top:focus_bot])
-    plt.plot(time[focus_top:focus_bot], sma_low_bollinger[focus_top:focus_bot])
-    plt.plot(time[focus_top:focus_bot], sma_high_bollinger[focus_top:focus_bot])
-    plt.plot(time[focus_top:focus_bot], candle_low_bollinger[focus_top:focus_bot])
-    plt.plot(time[focus_top:focus_bot], candle_high_bollinger[focus_top:focus_bot])
+    # plt.figure(figsize=(20, 10))
+    # plt.suptitle('loss trades')
+    # ax[1].plot(minute_time, data_volume, '.')
+
+    ax_twin = ax[1].twinx()
+    ax_twin.plot(minute_time[tradeable], Bollinger_oscillator[tradeable])
+    ax_twin.plot(minute_time[tradeable], np.ones_like(minute_time[tradeable]) * parameter['Bollinger_top'], color='k')
+    ax_twin.plot(minute_time[tradeable], np.ones_like(minute_time[tradeable]) * parameter['Bollinger_bot'], color='k')
+
+    ax[1].plot(minute_time[tradeable], candle[tradeable], '.')
+    ax[1].plot(minute_time[tradeable], sma[tradeable])
+    ax[1].plot(minute_time[tradeable], sma_low_bollinger[tradeable])
+    ax[1].plot(minute_time[tradeable], sma_high_bollinger[tradeable])
+    ax[1].plot(minute_time[tradeable], candle_low_bollinger[tradeable])
+    ax[1].plot(minute_time[tradeable], candle_high_bollinger[tradeable])
 
     loss_put_buy_locs = put_buy_locs[put_profits < 0]
     put_cut = loss_put_buy_locs[loss_put_buy_locs > focus_top]
-    plt.plot(time[put_cut], data[put_cut], '>', color='r')
-    # plt.plot(put_cut - focus_top, sma[put_cut], '>', color='r')
-    sma_d_buy = sma_dd[put_cut]
+    ax[1].plot(minute_time[put_cut], candle[put_cut], '>', color='k')
 
     loss_put_sell_locs = put_sell_locs[put_profits < 0]
     put_cut = loss_put_sell_locs[loss_put_sell_locs > focus_top]
-    plt.plot(time[put_cut], data[put_cut], '<', color='g')
-    # plt.plot(put_cut - focus_top, sma[put_cut], '<', color='g')
+    ax[1].plot(minute_time[put_cut], candle[put_cut], '<', color='k')
 
-    plt.figure(figsize=(20, 10))
-    plt.plot(time[put_cut], sma_d_buy, '.')
-
-    '''
-    focus_top = 3000
-    focus_bot = 35000
-    plt.figure(figsize=(20, 10))
-    plt.suptitle(group_choice + ' ' + 'open sma')
-    plt.plot(sma[focus_top:focus_bot])
-    plt.plot(sma_low_bollinger[focus_top:focus_bot])
-    plt.plot(sma_high_bollinger[focus_top:focus_bot])
-
-    peak_cut = local_minimums_loc[local_minimums_loc > focus_top]
-    plt.plot(peak_cut - focus_top, sma[peak_cut], '.', color='k')
-
-    #peak_cut = local_maximums_loc[local_maximums_loc > focus_top]
-    #plt.plot(peak_cut - focus_top, sma[peak_cut], '.', color='b')
-    '''
