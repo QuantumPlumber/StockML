@@ -41,12 +41,15 @@ def slinger(ax, datafile, ticker, parameters):
     sma_d = Analytics.derivative(sma, period=period // 6)
     # sma_d = Analytics.moving_average(sma_d, period=period // 6)
     sma_dd = Analytics.second_derivative(sma, period=period)
+    day_volatility = Analytics.day_volatility(data=candle, tradeable=tradeable)
+    print('day volatility: {}'.format(day_volatility))
 
     # find the best strategy of given strategies:
 
     performance_list = []
     # parameters['option_type'] = position_class.OptionType.PUT
     for parameter in parameters:
+        parameter['VIX'] = day_volatility
         results_list = PutSlingerBollinger.Bollinger_strat(time=time,
                                                            sma=sma,
                                                            sma_short=sma_short,
@@ -214,7 +217,7 @@ if __name__ == "__main__":
     # parameters = {'Bollinger_top': .0, 'Bollinger_bot': -.8, 'stop_loss': .8, 'profit': 1.8}
     parameters.append({'Bollinger_top': .0,
                        'Bollinger_bot': -2.0,
-                       'stop_loss': .8,
+                       'stop_loss': .5,
                        'profit': .8,
                        'flip': 1,
                        'option_type': position_class.OptionType.PUT,
@@ -223,8 +226,8 @@ if __name__ == "__main__":
 
     parameters.append({'Bollinger_top': .0,
                        'Bollinger_bot': -2.0,
-                       'stop_loss': .8,
-                       'profit': .9,
+                       'stop_loss': .5,
+                       'profit': .8,
                        'flip': -1,
                        'option_type': position_class.OptionType.CALL,
                        'VIX': 24}

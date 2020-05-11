@@ -28,8 +28,8 @@ class position():
         self.strike_price = strike_price
 
         self.n_binomial = n_binomial
-        self.volatility = volatility / 100.
-        self.volatility_time_period = 9 * 24 * 60
+        self.volatility = volatility
+        self.volatility_time_period = expiration
 
         self.r = 0
         self.q = 0
@@ -80,7 +80,7 @@ class position():
         # convert volatility to local timestep
         volatility_rescale = self.volatility_time_period / delta_t  # compute number to steps in volatility interval
         # print(volatility_rescale)
-        local_volatility = self.volatility / np.sqrt(volatility_rescale) / 8
+        local_volatility = self.volatility / np.sqrt(volatility_rescale) * 2
         # print(local_volatility)
 
         up = np.exp(local_volatility * np.sqrt(delta_t))

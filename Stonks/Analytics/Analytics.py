@@ -38,7 +38,6 @@ def minute_time(t):
     end_of_trading_minute = 16 * 60
 
     for i in np.arange(t.shape[0]):
-
         trade_time = arrow.get(t[i] * 1e-3).to('America/New_York')
         current_minute = trade_time.hour * 60 + trade_time.minute  # in minutes from open
         minute_t[i] = current_minute - start_of_trading_minute
@@ -221,3 +220,12 @@ def third_derivative(data, period=20):
     derivative[0:period] = np.ones_like(period - 1) * derivative[period]
 
     return derivative
+
+
+def day_volatility(data, tradeable):
+    local_data = data[tradeable]
+    local_shape = local_data.shape[0]
+    average = np.sum(local_data) / local_shape
+    volatility = np.sqrt(np.sum(((average - local_data) / average) ** 2) / local_shape)
+
+    return volatility
