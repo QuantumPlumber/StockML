@@ -9,6 +9,10 @@ class StonksStrategyState(Enum):
     processing = 2
     initialized = 3
 
+class StonksOptionType(Enum):
+    PUT = 'PUT'
+    CALL = 'CALL'
+
 class StonksPositionState(Enum):
     needs_buy_order = 1
     open_buy_order = 2

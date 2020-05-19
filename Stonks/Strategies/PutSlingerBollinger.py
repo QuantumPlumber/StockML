@@ -57,7 +57,7 @@ def Bollinger_strat(time,
     buy_trigger = False
     sell_armed = False
     sell_trigger = False
-    for i in np.arange(sma.shape[0]):
+    for i in np.arange(1, sma.shape[0]):
         trade_time = arrow.get(time[i] * 1e-3).to('America/New_York')
         current_minute = trade_time.hour * 60 + trade_time.minute  # in minutes from open
         time_from_open = current_minute - start_of_trading_minute
@@ -78,7 +78,7 @@ def Bollinger_strat(time,
 
             ############### Toggle buy ###########################
 
-            threshold = 2 * (sma_short[i] - sma[i]) / np.absolute(bollinger_up[i] - bollinger_down[i]) * parameters[
+            threshold = 2 * (sma_short[i-1] - sma[i-1]) / np.absolute(bollinger_up[i-1] - bollinger_down[i-1]) * parameters[
                 'flip']
 
             if threshold > parameters['Bollinger_top']:

@@ -41,12 +41,15 @@ def days_in_directory(filedirectory='D:/StockData/', ticker='SPY'):
         mid_day = arrow.get(time_data[time_data.shape[0] // 2] * 1e-3).to('America/New_York')
         date = mid_day.date()
 
+        start_date = arrow.Arrow(year=2020, month=4, day=21, tzinfo='America/New_York')
+        end_date = arrow.now('America/New_York')
+
         print('isoweekday is: {}'.format((mid_day.isoweekday())))
         if mid_day.isoweekday() not in [1, 2, 3, 4, 5]:
             print('not a weekday')
             continue
         else:
-            if date not in unique_dates:
+            if date not in unique_dates and mid_day.is_between(start=start_date, end=end_date, bounds='()'):
                 file_number += 1
                 unique_dates.append(date)
             else:
@@ -106,11 +109,14 @@ def data_file_generator(filedirectory='D:/StockData/', ticker='SPY'):
         mid_day = arrow.get(time_data[time_data.shape[0] // 2] * 1e-3).to('America/New_York')
         date = mid_day.date()
 
+        start_date = arrow.Arrow(year=2020, month=4, day=21, tzinfo='America/New_York')
+        end_date = arrow.now('America/New_York')
+
         if arrow.get(time_data[time_data.shape[0] // 2] * 1e-3).isoweekday() not in [1, 2, 3, 4, 5]:
             print('not a weekday')
             continue
         else:
-            if date not in unique_dates:
+            if date not in unique_dates and mid_day.is_between(start=start_date, end=end_date, bounds='()'):
                 unique_dates.append(date)
 
                 count = 0

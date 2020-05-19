@@ -217,7 +217,7 @@ if __name__ == "__main__":
     # parameters = {'Bollinger_top': .0, 'Bollinger_bot': -.8, 'stop_loss': .8, 'profit': 1.8}
     parameters.append({'Bollinger_top': .0,
                        'Bollinger_bot': -2.0,
-                       'stop_loss': .5,
+                       'stop_loss': .8,
                        'profit': .8,
                        'flip': 1,
                        'option_type': position_class.OptionType.PUT,
@@ -228,10 +228,31 @@ if __name__ == "__main__":
                        'Bollinger_bot': -2.0,
                        'stop_loss': .5,
                        'profit': .8,
+                       'flip': 1,
+                       'option_type': position_class.OptionType.PUT,
+                       'VIX': 24}
+                      )
+    '''
+    parameters = []
+    # parameters = {'Bollinger_top': .0, 'Bollinger_bot': -.8, 'stop_loss': .8, 'profit': 1.8}
+    parameters.append({'Bollinger_top': .80,
+                       'Bollinger_bot': 0.,
+                       'stop_loss': .8,
+                       'profit': 1.3,
+                       'flip': 1,
+                       'option_type': position_class.OptionType.PUT,
+                       'VIX': 24}
+                      )
+
+    parameters.append({'Bollinger_top': .80,
+                       'Bollinger_bot': .0,
+                       'stop_loss': .8,
+                       'profit': 1.3,
                        'flip': -1,
                        'option_type': position_class.OptionType.CALL,
                        'VIX': 24}
                       )
+    '''
 
     days_in_directory, unique_dates = DailyGenerator.days_in_directory(filedirectory='D:/StockData/', ticker=ticker)
     print('days in directory: {}'.format(days_in_directory))

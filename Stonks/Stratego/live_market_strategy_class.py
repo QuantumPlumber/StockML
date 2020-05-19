@@ -447,6 +447,7 @@ class Strategy:
                 # if True:
 
                 self.strike_delta = self.parameters['price_multiplier'] * (candle[-1] - bollinger_down[-1])
+
                 if self.verbose: print('Target strike delta is: {}'.format(self.strike_delta))
 
                 if self.strike_delta <= self.parameters['min_strike_delta']:
@@ -454,8 +455,12 @@ class Strategy:
                 if self.strike_delta >= self.parameters['max_strike_delta']:
                     self.strike_delta = self.parameters['max_strike_delta']
 
+                # TODO: adjust this to allow calls:
                 # define strike price
-                self.strike_price = candle[-1] - self.strike_delta
+                if self.parameters['option_type'] == enums.StonksOptionType.PUT:
+                    self.strike_price = candle[-1] - self.strike_delta
+                elif self.parameters['option_type'] == enums.StonksOptionType.CALL:
+                    self.strike_price = candle[-1] + self.strike_delta
                 if self.verbose: print('Target strike price is: {}'.format(self.strike_price))
 
                 #################################### Compute capital for new position ################################
@@ -469,7 +474,7 @@ class Strategy:
                                      self.initial_account_values['cashAvailableForTrading']
 
                 self.target_capital_deployment = self.initial_account_values['cashAvailableForTrading'] * \
-                                                 (self.seconds_to_close / (
+                                                 (self.seconds_from_open / (
                                                              self.seconds_from_open + self.seconds_to_close))
                 self.actual_capital_deployment = self.initial_account_values['cashAvailableForTrading'] - \
                                                  self.current_account_values['cashAvailableForTrading']
@@ -594,12 +599,17 @@ class Strategy:
         self.options_chain_quote = self.utility_class.get_options_chain(payload=payload)
 
         putExpDateMap = self.options_chain_quote['putExpDateMap']
+        callExpDateMap = self.options_chain_quote['callExpDateMap']
         date_keys = list(putExpDateMap.keys())
         if len(date_keys) > 1:
             self.putExpDateMap = None
+            self.callExpDateMap = None
             return False
         else:
-            self.options_chain_dict = self.options_chain_quote['putExpDateMap'][date_keys[0]]
+            if self.parameters['option_type'] == enums.StonksOptionType.PUT:
+                self.options_chain_dict = self.options_chain_quote['putExpDateMap'][date_keys[0]]
+            elif self.parameters['option_type'] == enums.StonksOptionType.CALL:
+                self.options_chain_dict = self.options_chain_quote['callExpDateMap'][date_keys[0]]
 
         # now find the closest strike price to the strategy price
         strike_prices = []
@@ -623,6 +633,7 @@ class Strategy:
             if self.verbose: print(
                 'target capital of {} could not afford options of price {}'.format(self.target_capital,
                                                                                    self.optoin_price))
+            self.log_snapshot()
             return
         else:
             self.target_quantity = self.target_capital // self.optoin_price

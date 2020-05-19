@@ -28,8 +28,8 @@ class position():
         self.strike_price = strike_price
 
         self.n_binomial = n_binomial
-        self.volatility = volatility
-        self.volatility_time_period = expiration
+        self.volatility = volatility / 100.
+        self.volatility_time_period = 30 * 24 * 60
 
         self.r = 0
         self.q = 0
@@ -73,15 +73,20 @@ class position():
         :param stock_price: current price of stock
         :return: returns the
         '''
-        delta_t = (self.expiration - t) / self.n_binomial  # units of minutes
+        period = (self.expiration - t)
+        delta_t = period / self.n_binomial  # units of minutes
         # print(delta_t)
         self.delta_t = delta_t
 
         # convert volatility to local timestep
         volatility_rescale = self.volatility_time_period / delta_t  # compute number to steps in volatility interval
-        # print(volatility_rescale)
-        local_volatility = self.volatility / np.sqrt(volatility_rescale) * 2
-        # print(local_volatility)
+        volatility_rescale = self.volatility_time_period / period  # compute number to steps in volatility interval
+        print(volatility_rescale)
+        # local_volatility = self.volatility / np.sqrt(volatility_rescale) * 2
+        local_volatility = self.volatility / 2
+
+        local_volatility = self.volatility / np.sqrt(volatility_rescale)
+        print(local_volatility)
 
         up = np.exp(local_volatility * np.sqrt(delta_t))
         # print('up: {}'.format(up))
@@ -124,9 +129,10 @@ class position():
         '''
         if np.isnan(option_price):
             option_price = .1
-        '''
+        
         if option_price <= .1:
             option_price = .1
+        '''
 
         self.price_history.append(option_price)
 
@@ -139,12 +145,13 @@ class position():
 
     def check_stop_loss(self):
         if self.value_history[-1] <= self.stop_loss * self.value_history[0]:
+            # if self.value_history[-1] <= self.stop_loss * np.max(np.array(self.value_history)):
             return True
 
     def check_stop_profit(self):
         if self.value_history[-1] >= self.value_history[0]:
             if self.value_history[-1] <= self.stop_profit * np.max(np.array(self.value_history)):
-            #if self.value_history[-1] >= self.stop_profit * np.array(self.value_history)[0]:
+                # if self.value_history[-1] >= self.stop_profit * np.array(self.value_history)[0]:
                 return True
 
     def percent_gain(self):
@@ -159,7 +166,8 @@ if __name__ == "__main__":
 
     strike = 260
     stock_price = 260
-    volatitity = 111.
+    volatitity = .0018
+    volatitity = 36.
     end_of_day = 60 * 6 + 30
     put_option = position(strike_price=strike,
                           volatility=volatitity,
@@ -184,7 +192,7 @@ if __name__ == "__main__":
     tt, pp = np.meshgrid(compute_times, stock_prices)
     plt.figure(figsize=(10, 10))
     plt.pcolormesh(tt, pp, price_history)
-    #plt.pcolormesh(tt, pp, price_history - price_history[stock_prices.shape[0] // 2, 0])
+    # plt.pcolormesh(tt, pp, price_history - price_history[stock_prices.shape[0] // 2, 0])
     plt.colorbar()
 
     '''
