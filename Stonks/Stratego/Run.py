@@ -23,7 +23,7 @@ if __name__ == '__main__':
                   'min_strike_delta': 3, 'max_strike_delta': 6,
                   'minimum_position_size_fraction': .2, 'maximum_position_size_fraction': .3,
                   'stop_trading': .2}
-
+    '''
     parameters = {'option_type': enums.StonksOptionType.CALL,
                   'Bollinger_top': .0, 'Bollinger_bot': -2.0,
                   'stop_loss': .8, 'profit': .5,
@@ -31,7 +31,7 @@ if __name__ == '__main__':
                   'min_strike_delta': 3, 'max_strike_delta': 6,
                   'minimum_position_size_fraction': .2, 'maximum_position_size_fraction': .3,
                   'stop_trading': .2}
-
+    '''
     '''
     #old dict: this probably needs to change according to volatility
     compute_dict = {enums.ComputeKeys.sma: [30, 10],

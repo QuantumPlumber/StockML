@@ -415,6 +415,8 @@ class Strategy:
                     print(pos.status)
                     print('position target_quantity and quantity:')
                     print([pos.target_quantity, pos.quantity])
+                    print('position current currentDayProfitLossPercentage:')
+                    print([pos.currentDayProfitLossPercentage])
                     print('position orders:')
                     print([[order.current_status, order.order_id, order.is_open]
                            for order in pos.order_list if order.is_open is not False])
@@ -588,28 +590,43 @@ class Strategy:
 
         if self.verbose: print('inside the new position building function')
 
-        payload = {'symbol': 'SPY',
-                   'contractType': 'PUT',
-                   'strikeCount': 20,
-                   'includeQuotes': 'TRUE',
-                   'strategy': 'SINGLE',
-                   'fromDate': self.today.shift(days=-1).format('YYYY-MM-DD'),
-                   'toDate': self.options_end_date.shift(days=1).format('YYYY-MM-DD')}
+        if self.parameters['option_type'] == enums.StonksOptionType.PUT:
+            payload = {'symbol': 'SPY',
+                       'contractType': 'PUT',
+                       'strikeCount': 20,
+                       'includeQuotes': 'TRUE',
+                       'strategy': 'SINGLE',
+                       'fromDate': self.today.shift(days=-1).format('YYYY-MM-DD'),
+                       'toDate': self.options_end_date.shift(days=1).format('YYYY-MM-DD')}
 
-        self.options_chain_quote = self.utility_class.get_options_chain(payload=payload)
+            self.options_chain_quote = self.utility_class.get_options_chain(payload=payload)
 
-        putExpDateMap = self.options_chain_quote['putExpDateMap']
-        callExpDateMap = self.options_chain_quote['callExpDateMap']
-        date_keys = list(putExpDateMap.keys())
-        if len(date_keys) > 1:
-            self.putExpDateMap = None
-            self.callExpDateMap = None
-            return False
-        else:
-            if self.parameters['option_type'] == enums.StonksOptionType.PUT:
-                self.options_chain_dict = self.options_chain_quote['putExpDateMap'][date_keys[0]]
-            elif self.parameters['option_type'] == enums.StonksOptionType.CALL:
-                self.options_chain_dict = self.options_chain_quote['callExpDateMap'][date_keys[0]]
+            putExpDateMap = self.options_chain_quote['putExpDateMap']
+            date_keys = list(putExpDateMap.keys())
+            if len(date_keys) > 1:
+                self.putExpDateMap = None
+                return False
+            else:
+                self.options_chain_dict = putExpDateMap[date_keys[0]]
+
+        elif self.parameters['option_type'] == enums.StonksOptionType.CALL:
+            payload = {'symbol': 'SPY',
+                       'contractType': 'CALL',
+                       'strikeCount': 20,
+                       'includeQuotes': 'TRUE',
+                       'strategy': 'SINGLE',
+                       'fromDate': self.today.shift(days=-1).format('YYYY-MM-DD'),
+                       'toDate': self.options_end_date.shift(days=1).format('YYYY-MM-DD')}
+
+            self.options_chain_quote = self.utility_class.get_options_chain(payload=payload)
+
+            callExpDateMap = self.options_chain_quote['callExpDateMap']
+            date_keys = list(callExpDateMap.keys())
+            if len(date_keys) > 1:
+                self.callExpDateMap = None
+                return False
+            else:
+                self.options_chain_dict = callExpDateMap[date_keys[0]]
 
         # now find the closest strike price to the strategy price
         strike_prices = []
@@ -680,6 +697,15 @@ class Strategy:
 
             if self.threshold > self.parameters['Bollinger_bot']:
                 self.sell_armed = False
+
+            ########################################### profit trigger sell position ###################################
+            pos: positions.Position
+            for pos in self.positions:
+                if pos.position_active:
+                    if pos.currentDayProfitLossPercentage is not None:
+                        if pos.currentDayProfitLossPercentage > 1.60:
+                            if pos.status is not enums.StonksPositionState.open_close_order:
+                                pos.status = enums.StonksPositionState.needs_close_order
 
         if self.state is enums.StonksStrategyState.processing:
             # ensure a stop-loss is in

@@ -448,6 +448,7 @@ class UtilityClass():
             if self.verbose: print(self.account_data)
             try:
                 return self.account_reply.json()['securitiesAccount']['positions']
+            #TODO: catch json decode error here as well.
             except KeyError:
                 # if no entry, then there are no positions, and return empty list.
                 return []
