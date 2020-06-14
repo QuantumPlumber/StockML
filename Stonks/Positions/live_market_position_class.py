@@ -53,10 +53,11 @@ class Position:
         self.position_data = []
         self.position_data.append(None)
         self.quantity = 0
-        self.average_price = None
+        self.average_price = []
         self.currentDayProfitLossPercentage = None
         self.stop_loss_limit = None
         self.last_stop_loss_update_time = None
+        self.percent_gain = None
 
     def log_snapshot(self, log_directory):
 
@@ -86,8 +87,11 @@ class Position:
         self.position_data.append(position_data)
         self.value_history.append(position_data['marketValue'])
         self.quantity = position_data['longQuantity']
-        self.average_price = position_data['averagePrice']
+        self.average_price.append(position_data['averagePrice'])
         self.currentDayProfitLossPercentage = position_data['currentDayProfitLossPercentage']
+
+
+        self.percent_gain = self.average_price[-1]/self.average_price[0]
 
     def update_orders(self, order_payload_list: list):
         for order_payload in order_payload_list:

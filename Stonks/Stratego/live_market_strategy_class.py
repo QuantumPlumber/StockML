@@ -702,8 +702,8 @@ class Strategy:
             pos: positions.Position
             for pos in self.positions:
                 if pos.position_active:
-                    if pos.currentDayProfitLossPercentage is not None:
-                        if pos.currentDayProfitLossPercentage > 1.60:
+                    if pos.percent_gain is not None:
+                        if pos.percent_gain > 1.60:
                             if pos.status is not enums.StonksPositionState.open_close_order:
                                 pos.status = enums.StonksPositionState.needs_close_order
 

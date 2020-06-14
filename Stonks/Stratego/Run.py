@@ -16,7 +16,7 @@ import importlib
 importlib.reload(strategy_class)
 
 if __name__ == '__main__':
-    parameters = {'option_type': enums.StonksOptionType.PUT,
+    parameters = {'option_type': enums.StonksOptionType.CALL,
                   'Bollinger_top': .0, 'Bollinger_bot': -2.0,
                   'stop_loss': .8, 'profit': .5,
                   'price_multiplier': 2,
