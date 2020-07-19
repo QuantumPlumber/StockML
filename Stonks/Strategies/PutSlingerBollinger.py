@@ -119,8 +119,8 @@ def Bollinger_strat(time,
 
                 #print('trade_capital: {}'.format(trade_capital))
                 new_put = position_class.position(strike_price=strike_price,
-                                                  # volatility=.001,
-                                                  volatility=parameters['VIX'],
+                                                  volatility=1.,
+                                                  # volatility=parameters['VIX'],
                                                   t=time_from_open,
                                                   stock_price=candle[i],
                                                   expiration=60 * (6) + 30,

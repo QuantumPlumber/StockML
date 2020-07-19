@@ -127,6 +127,7 @@ class UtilityClass():
         self.browser.find_by_id('password').first.fill(payload['password'])
         self.browser.find_by_id('accept').first.click()
 
+        time.sleep(1)  # let the next website load before clicking accept.
         self.browser.find_by_id('accept').first.click()
 
         phone_code = input('please enter the code sent to the phone: ')
@@ -359,7 +360,7 @@ class UtilityClass():
             if self.verbose: print(self.account_data)
         elif self.account_reply.status_code == utility_exceptions.AccessSuccess.account_partial_success.value \
                 and not self.account_access_attempt:
-            #wait 5 seconds and then attempt again.
+            # wait 5 seconds and then attempt again.
             time.sleep(5)
             if self.verbose: print('Account data partial success, calling again..')
             self.account_reply = requests.get(url=self.accounts_endpoint, headers=self.access_header)
@@ -448,7 +449,7 @@ class UtilityClass():
             if self.verbose: print(self.account_data)
             try:
                 return self.account_reply.json()['securitiesAccount']['positions']
-            #TODO: catch json decode error here as well.
+            # TODO: catch json decode error here as well.
             except KeyError:
                 # if no entry, then there are no positions, and return empty list.
                 return []

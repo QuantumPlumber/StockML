@@ -79,14 +79,15 @@ class position():
         self.delta_t = delta_t
 
         # convert volatility to local timestep
-        volatility_rescale = self.volatility_time_period / delta_t  # compute number to steps in volatility interval
+        #volatility_rescale = self.volatility_time_period / delta_t  # compute number to steps in volatility interval
         volatility_rescale = self.volatility_time_period / period  # compute number to steps in volatility interval
-        print(volatility_rescale)
+        #print(volatility_rescale)
         # local_volatility = self.volatility / np.sqrt(volatility_rescale) * 2
         local_volatility = self.volatility / 2
+        local_volatility = self.volatility
 
         local_volatility = self.volatility / np.sqrt(volatility_rescale)
-        print(local_volatility)
+        #print(local_volatility)
 
         up = np.exp(local_volatility * np.sqrt(delta_t))
         # print('up: {}'.format(up))

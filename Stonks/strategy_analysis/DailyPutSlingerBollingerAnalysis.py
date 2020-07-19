@@ -76,9 +76,10 @@ def slinger(ax, datafile, ticker, parameters):
     performance_array = np.array(performance_list)
     print('performance_array: {}'.format(performance_array))
     best_perf_loc = np.where(performance_array == performance_array.max())[0][0]
-
+    
     # hack the parameters to be the best choice for the rest of the function, this keeps recoding to a minimum:
     parameter = parameters[best_perf_loc]
+    parameter = parameters[0]
 
     results_list = PutSlingerBollinger.Bollinger_strat(time=time,
                                                        sma=sma,

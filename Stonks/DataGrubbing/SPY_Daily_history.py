@@ -13,15 +13,16 @@ import numpy as np
 import arrow
 
 
-def grub(symbol='SPY', startdate=1581921000000):
+def grub(symbol='SPY'):
     # define endpoint
     price_endpoint = r'https://api.tdameritrade.com/v1/marketdata/{}/pricehistory'.format(symbol)
 
     payload = {'apikey': str(apikey),
-               'periodType': 'month',
-               'period': int(3),
+               'periodType': 'year',
+               'period': int(15),
                'frequencyType': 'daily',
-               'frequency': int(1)
+               'frequency': int(1),
+               'needExtendedHoursData': 'false',
                }
 
     content = requests.get(url=price_endpoint, params=payload)
@@ -68,9 +69,6 @@ if __name__ == '__main__':
                 local_dataset = local_group.create_dataset(name=key, shape=data[key].shape, dtype=np.float64)
                 # print(local_dataset.name)
                 local_dataset[...] = data[key]
-                if key == 'datetime':
-                    local_dataset = local_group.create_dataset(name='market_hours', shape=data[key].shape,
-                                                               dtype=np.float64)
 
         print('successfully grubbed {}'.format(symbol))
 

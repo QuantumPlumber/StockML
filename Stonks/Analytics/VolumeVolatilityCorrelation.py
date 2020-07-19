@@ -2,7 +2,7 @@ import os
 import h5py
 import matplotlib.pyplot as plt
 import numpy as np
-import Analytics
+from Stonks.Analytics import Analytics
 import time as tm
 
 import importlib
